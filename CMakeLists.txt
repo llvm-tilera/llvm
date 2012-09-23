@@ -84,6 +84,7 @@ set(LLVM_ALL_TARGETS
   NVPTX
   PowerPC
   Sparc
+  Tile64
   X86
   XCore
   )
