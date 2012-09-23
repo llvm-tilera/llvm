@@ -149,6 +149,13 @@ public:
     return true;
   }
 
+  // canBundleIntoCurrentPacket - return true if instruction MI can be put into
+  // the current packet according to target-specific bundle constraints. Use
+  // after checking if functional units could execute the instruction.
+  virtual bool canBundleIntoCurrentPacket(MachineInstr *MI) {
+    return true;
+  }
+
   // isLegalToPacketizeTogether - Is it legal to packetize SUI and SUJ
   // together.
   virtual bool isLegalToPacketizeTogether(SUnit *SUI, SUnit *SUJ) {

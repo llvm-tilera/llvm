@@ -191,7 +191,7 @@ void VLIWPacketizerList::PacketizeMIs(MachineBasicBlock *MBB,
 
     // Ask DFA if machine resource is available for MI.
     bool ResourceAvail = ResourceTracker->canReserveResources(MI);
-    if (ResourceAvail) {
+    if (ResourceAvail && canBundleIntoCurrentPacket(MI)) {
       // Dependency check for MI with instructions in CurrentPacketMIs.
       for (std::vector<MachineInstr*>::iterator VI = CurrentPacketMIs.begin(),
            VE = CurrentPacketMIs.end(); VI != VE; ++VI) {
