@@ -42,6 +42,7 @@ const char *Triple::getArchTypeName(ArchType Kind) {
   case nvptx64: return "nvptx64";
   case le32:    return "le32";
   case amdil:   return "amdil";
+  case tile64:  return "tile64";
   }
 
   llvm_unreachable("Invalid ArchType!");
@@ -83,6 +84,7 @@ const char *Triple::getArchTypePrefix(ArchType Kind) {
   case nvptx64: return "nvptx";
   case le32:    return "le32";
   case amdil:   return "amdil";
+  case tile64:  return "tile64";
   }
 }
 
@@ -171,6 +173,7 @@ Triple::ArchType Triple::getArchTypeForLLVMName(StringRef Name) {
     .Case("nvptx64", nvptx64)
     .Case("le32", le32)
     .Case("amdil", amdil)
+    .Case("tile64", tile64)
     .Default(UnknownArch);
 }
 
@@ -202,6 +205,7 @@ Triple::ArchType Triple::getArchTypeForDarwinArchName(StringRef Str) {
     .Case("nvptx", Triple::nvptx)
     .Case("nvptx64", Triple::nvptx64)
     .Case("amdil", Triple::amdil)
+    .Case("tile64", Triple::tile64)
     .Default(Triple::UnknownArch);
 }
 
@@ -226,6 +230,7 @@ const char *Triple::getArchNameForAssembler() {
     .Case("nvptx64", "nvptx64")
     .Case("le32", "le32")
     .Case("amdil", "amdil")
+    .Case("tile64", "tile64")
     .Default(NULL);
 }
 
@@ -260,6 +265,7 @@ static Triple::ArchType parseArch(StringRef ArchName) {
     .Case("nvptx64", Triple::nvptx64)
     .Case("le32", Triple::le32)
     .Case("amdil", Triple::amdil)
+    .Case("tile64", Triple::tile64)
     .Default(Triple::UnknownArch);
 }
 
@@ -692,6 +698,7 @@ static unsigned getArchPointerBitWidth(llvm::Triple::ArchType Arch) {
   case llvm::Triple::thumb:
   case llvm::Triple::x86:
   case llvm::Triple::xcore:
+  case llvm::Triple::tile64:
     return 32;
 
   case llvm::Triple::mips64:
@@ -741,6 +748,7 @@ Triple Triple::get32BitArchVariant() const {
   case Triple::thumb:
   case Triple::x86:
   case Triple::xcore:
+  case Triple::tile64:
     // Already 32-bit.
     break;
 
@@ -769,6 +777,7 @@ Triple Triple::get64BitArchVariant() const {
   case Triple::tce:
   case Triple::thumb:
   case Triple::xcore:
+  case Triple::tile64:
     T.setArch(UnknownArch);
     break;
 
