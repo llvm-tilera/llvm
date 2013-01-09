@@ -31,13 +31,13 @@
 #include "Tile64SelectionDAGInfo.h"
 #include "Tile64Subtarget.h"
 #include "llvm/Target/TargetMachine.h"
-#include "llvm/Target/TargetData.h"
+#include "llvm/DataLayout.h"
 #include "llvm/Target/TargetFrameLowering.h"
 
 namespace llvm {
 
 class Tile64TargetMachine : public LLVMTargetMachine {
-  const TargetData DataLayout;       // Calculates type size & alignment
+  const DataLayout DL; // Calculates type size & alignment
   Tile64Subtarget Subtarget;
   Tile64InstrInfo InstrInfo;
   Tile64TargetLowering TLInfo;
@@ -74,8 +74,8 @@ public:
     return &TSInfo;
   }
 
-  virtual const TargetData *getTargetData() const {
-    return &DataLayout;
+  virtual const DataLayout *getDataLayout() const {
+    return &DL;
   }
 
   virtual const InstrItineraryData *getInstrItineraryData() const {
