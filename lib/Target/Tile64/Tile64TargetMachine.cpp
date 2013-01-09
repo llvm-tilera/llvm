@@ -37,7 +37,7 @@ Tile64TargetMachine::Tile64TargetMachine(const Target &T, StringRef TT,
                                          Reloc::Model RM, CodeModel::Model CM,
                                          CodeGenOpt::Level OL)
   : LLVMTargetMachine(T, TT, CPU, FS, Options, RM, CM, OL),
-    DataLayout("e-p:32:32-i8:8-i16:16-i32:32-i64:64-f32:32-f64:64-a:0-S:64"),
+    DL("e-p:32:32-i8:8-i16:16-i32:32-i64:64-f32:32-f64:64-a:0-S:64"),
     Subtarget(TT, CPU, FS),
     InstrInfo(), TLInfo(*this), TSInfo(*this),
     FrameLowering(),

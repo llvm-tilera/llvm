@@ -363,8 +363,8 @@ AC_CACHE_CHECK([target architecture],[llvm_cv_target_arch],
   sparc*-*)               llvm_cv_target_arch="Sparc" ;;
   powerpc*-*)             llvm_cv_target_arch="PowerPC" ;;
   arm*-*)                 llvm_cv_target_arch="ARM" ;;
-  mips-*)                 llvm_cv_target_arch="Mips" ;;
-  mipsel-*)               llvm_cv_target_arch="Mips" ;;
+  mips-* | mips64-*)      llvm_cv_target_arch="Mips" ;;
+  mipsel-* | mips64el-*)  llvm_cv_target_arch="Mips" ;;
   xcore-*)                llvm_cv_target_arch="XCore" ;;
   msp430-*)               llvm_cv_target_arch="MSP430" ;;
   hexagon-*)              llvm_cv_target_arch="Hexagon" ;;
@@ -397,8 +397,8 @@ case $host in
   sparc*-*)               host_arch="Sparc" ;;
   powerpc*-*)             host_arch="PowerPC" ;;
   arm*-*)                 host_arch="ARM" ;;
-  mips-*)                 host_arch="Mips" ;;
-  mipsel-*)               host_arch="Mips" ;;
+  mips-* | mips64-*)      host_arch="Mips" ;;
+  mipsel-* | mips64el-*)  host_arch="Mips" ;;
   xcore-*)                host_arch="XCore" ;;
   msp430-*)               host_arch="MSP430" ;;
   hexagon-*)              host_arch="Hexagon" ;;
@@ -687,9 +687,9 @@ AC_ARG_ENABLE(backtraces,
                  [Enable embedding backtraces on crash (default is YES)]),,
                  enableval=default)
 case "$enableval" in
-  yes) AC_SUBST(ENABLE_TIMESTAMPS,[1]) ;;
-  no)  AC_SUBST(ENABLE_TIMESTAMPS,[0]) ;;
-  default) AC_SUBST(ENABLE_TIMESTAMPS,[1]) ;;
+  yes) AC_SUBST(ENABLE_BACKTRACES,[1]) ;;
+  no)  AC_SUBST(ENABLE_BACKTRACES,[0]) ;;
+  default) AC_SUBST(ENABLE_BACKTRACES,[1]) ;;
   *) AC_MSG_ERROR([Invalid setting for --enable-backtraces. Use "yes" or "no"]) ;;
 esac
 AC_DEFINE_UNQUOTED([ENABLE_BACKTRACES],$ENABLE_BACKTRACES,
@@ -716,6 +716,8 @@ case "$enableval" in
         arm)      TARGETS_TO_BUILD="ARM $TARGETS_TO_BUILD" ;;
         mips)     TARGETS_TO_BUILD="Mips $TARGETS_TO_BUILD" ;;
         mipsel)   TARGETS_TO_BUILD="Mips $TARGETS_TO_BUILD" ;;
+        mips64)   TARGETS_TO_BUILD="Mips $TARGETS_TO_BUILD" ;;
+        mips64el) TARGETS_TO_BUILD="Mips $TARGETS_TO_BUILD" ;;
         spu)      TARGETS_TO_BUILD="CellSPU $TARGETS_TO_BUILD" ;;
         xcore)    TARGETS_TO_BUILD="XCore $TARGETS_TO_BUILD" ;;
         msp430)   TARGETS_TO_BUILD="MSP430 $TARGETS_TO_BUILD" ;;
@@ -1712,6 +1714,11 @@ fi
 
 dnl OCaml findlib META file
 AC_CONFIG_FILES([bindings/ocaml/llvm/META.llvm])
+
+dnl Add --program-prefix value to Makefile.rules. Already an ARG variable.
+test "x$program_prefix" = "xNONE" && program_prefix=""
+AC_SUBST([program_prefix])
+
 
 dnl Do special configuration of Makefiles
 AC_CONFIG_COMMANDS([setup],,[llvm_src="${srcdir}"])

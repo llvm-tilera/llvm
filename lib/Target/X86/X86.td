@@ -118,11 +118,13 @@ def FeatureBMI     : SubtargetFeature<"bmi", "HasBMI", "true",
                                       "Support BMI instructions">;
 def FeatureBMI2    : SubtargetFeature<"bmi2", "HasBMI2", "true",
                                       "Support BMI2 instructions">;
+def FeatureRTM     : SubtargetFeature<"rtm", "HasRTM", "true",
+                                      "Support RTM instructions">;
 def FeatureLeaForSP : SubtargetFeature<"lea-sp", "UseLeaForSP", "true",
                                      "Use LEA for adjusting the stack pointer">;
 def FeatureSlowDivide : SubtargetFeature<"idiv-to-divb",
-                                     "HasSlowDivide", "true",
-                                     "Use small divide for positive values less than 256">;
+                          "HasSlowDivide", "true",
+                          "Use small divide for positive values less than 256">;
 
 //===----------------------------------------------------------------------===//
 // X86 processors supported.
@@ -162,7 +164,7 @@ def : Proc<"core2",           [FeatureSSSE3, FeatureCMPXCHG16B,
                                FeatureSlowBTMem]>;
 def : Proc<"penryn",          [FeatureSSE41, FeatureCMPXCHG16B,
                                FeatureSlowBTMem]>;
-def : AtomProc<"atom",        [ProcIntelAtom, FeatureSSE3, FeatureCMPXCHG16B,
+def : AtomProc<"atom",        [ProcIntelAtom, FeatureSSSE3, FeatureCMPXCHG16B,
                                FeatureMOVBE, FeatureSlowBTMem, FeatureLeaForSP,
                                FeatureSlowDivide]>;
 // "Arrandale" along with corei3 and corei5
@@ -192,7 +194,8 @@ def : Proc<"core-avx2",       [FeatureAVX2, FeatureCMPXCHG16B, FeaturePOPCNT,
                                FeatureAES, FeaturePCLMUL, FeatureRDRAND,
                                FeatureF16C, FeatureFSGSBase,
                                FeatureMOVBE, FeatureLZCNT, FeatureBMI,
-                               FeatureBMI2, FeatureFMA]>;
+                               FeatureBMI2, FeatureFMA,
+                               FeatureRTM]>;
 
 def : Proc<"k6",              [FeatureMMX]>;
 def : Proc<"k6-2",            [Feature3DNow]>;

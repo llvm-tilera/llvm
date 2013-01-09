@@ -689,18 +689,18 @@ parseTwoOperandConstraint(StringRef S, ArrayRef<SMLoc> Loc) {
   // Split via the '='.
   std::pair<StringRef, StringRef> Ops = S.split('=');
   if (Ops.second == "")
-    throw TGError(Loc, "missing '=' in two-operand alias constraint");
+    PrintFatalError(Loc, "missing '=' in two-operand alias constraint");
   // Trim whitespace and the leading '$' on the operand names.
   size_t start = Ops.first.find_first_of('$');
   if (start == std::string::npos)
-    throw TGError(Loc, "expected '$' prefix on asm operand name");
+    PrintFatalError(Loc, "expected '$' prefix on asm operand name");
   Ops.first = Ops.first.slice(start + 1, std::string::npos);
   size_t end = Ops.first.find_last_of(" \t");
   Ops.first = Ops.first.slice(0, end);
   // Now the second operand.
   start = Ops.second.find_first_of('$');
   if (start == std::string::npos)
-    throw TGError(Loc, "expected '$' prefix on asm operand name");
+    PrintFatalError(Loc, "expected '$' prefix on asm operand name");
   Ops.second = Ops.second.slice(start + 1, std::string::npos);
   end = Ops.second.find_last_of(" \t");
   Ops.first = Ops.first.slice(0, end);
@@ -716,11 +716,11 @@ void MatchableInfo::formTwoOperandAlias(StringRef Constraint) {
   int SrcAsmOperand = findAsmOperandNamed(Ops.first);
   int DstAsmOperand = findAsmOperandNamed(Ops.second);
   if (SrcAsmOperand == -1)
-    throw TGError(TheDef->getLoc(),
+    PrintFatalError(TheDef->getLoc(),
                   "unknown source two-operand alias operand '" +
                   Ops.first.str() + "'.");
   if (DstAsmOperand == -1)
-    throw TGError(TheDef->getLoc(),
+    PrintFatalError(TheDef->getLoc(),
                   "unknown destination two-operand alias operand '" +
                   Ops.second.str() + "'.");
 
@@ -852,15 +852,15 @@ void MatchableInfo::tokenizeAsmString(const AsmMatcherInfo &Info) {
   // The first token of the instruction is the mnemonic, which must be a
   // simple string, not a $foo variable or a singleton register.
   if (AsmOperands.empty())
-    throw TGError(TheDef->getLoc(),
+    PrintFatalError(TheDef->getLoc(),
                   "Instruction '" + TheDef->getName() + "' has no tokens");
   Mnemonic = AsmOperands[0].Token;
   if (Mnemonic.empty())
-    throw TGError(TheDef->getLoc(),
+    PrintFatalError(TheDef->getLoc(),
                   "Missing instruction mnemonic");
   // FIXME : Check and raise an error if it is a register.
   if (Mnemonic[0] == '$')
-    throw TGError(TheDef->getLoc(),
+    PrintFatalError(TheDef->getLoc(),
                   "Invalid instruction mnemonic '" + Mnemonic.str() + "'!");
 
   // Remove the first operand, it is tracked in the mnemonic field.
@@ -870,12 +870,12 @@ void MatchableInfo::tokenizeAsmString(const AsmMatcherInfo &Info) {
 bool MatchableInfo::validate(StringRef CommentDelimiter, bool Hack) const {
   // Reject matchables with no .s string.
   if (AsmString.empty())
-    throw TGError(TheDef->getLoc(), "instruction with empty asm string");
+    PrintFatalError(TheDef->getLoc(), "instruction with empty asm string");
 
   // Reject any matchables with a newline in them, they should be marked
   // isCodeGenOnly if they are pseudo instructions.
   if (AsmString.find('\n') != std::string::npos)
-    throw TGError(TheDef->getLoc(),
+    PrintFatalError(TheDef->getLoc(),
                   "multiline instruction is not valid for the asmparser, "
                   "mark it isCodeGenOnly");
 
@@ -883,7 +883,7 @@ bool MatchableInfo::validate(StringRef CommentDelimiter, bool Hack) const {
   // has one line.
   if (!CommentDelimiter.empty() &&
       StringRef(AsmString).find(CommentDelimiter) != StringRef::npos)
-    throw TGError(TheDef->getLoc(),
+    PrintFatalError(TheDef->getLoc(),
                   "asmstring for instruction has comment character in it, "
                   "mark it isCodeGenOnly");
 
@@ -897,7 +897,7 @@ bool MatchableInfo::validate(StringRef CommentDelimiter, bool Hack) const {
   for (unsigned i = 0, e = AsmOperands.size(); i != e; ++i) {
     StringRef Tok = AsmOperands[i].Token;
     if (Tok[0] == '$' && Tok.find(':') != StringRef::npos)
-      throw TGError(TheDef->getLoc(),
+      PrintFatalError(TheDef->getLoc(),
                     "matchable with operand modifier '" + Tok.str() +
                     "' not supported by asm matcher.  Mark isCodeGenOnly!");
 
@@ -905,7 +905,7 @@ bool MatchableInfo::validate(StringRef CommentDelimiter, bool Hack) const {
     // We reject aliases and ignore instructions for now.
     if (Tok[0] == '$' && !OperandNames.insert(Tok).second) {
       if (!Hack)
-        throw TGError(TheDef->getLoc(),
+        PrintFatalError(TheDef->getLoc(),
                       "ERROR: matchable with tied operand '" + Tok.str() +
                       "' can never be matched!");
       // FIXME: Should reject these.  The ARM backend hits this with $lane in a
@@ -993,7 +993,7 @@ AsmMatcherInfo::getOperandClass(const CGIOperandList::OperandInfo &OI,
                                 int SubOpIdx) {
   Record *Rec = OI.Rec;
   if (SubOpIdx != -1)
-    Rec = dynamic_cast<DefInit*>(OI.MIOperandInfo->getArg(SubOpIdx))->getDef();
+    Rec = cast<DefInit>(OI.MIOperandInfo->getArg(SubOpIdx))->getDef();
   return getOperandClass(Rec, SubOpIdx);
 }
 
@@ -1004,10 +1004,10 @@ AsmMatcherInfo::getOperandClass(Record *Rec, int SubOpIdx) {
     // use it, else just fall back to the underlying register class.
     const RecordVal *R = Rec->getValue("ParserMatchClass");
     if (R == 0 || R->getValue() == 0)
-      throw "Record `" + Rec->getName() +
-        "' does not have a ParserMatchClass!\n";
+      PrintFatalError("Record `" + Rec->getName() +
+        "' does not have a ParserMatchClass!\n");
 
-    if (DefInit *DI= dynamic_cast<DefInit*>(R->getValue())) {
+    if (DefInit *DI= dyn_cast<DefInit>(R->getValue())) {
       Record *MatchClass = DI->getDef();
       if (ClassInfo *CI = AsmOperandClasses[MatchClass])
         return CI;
@@ -1016,28 +1016,28 @@ AsmMatcherInfo::getOperandClass(Record *Rec, int SubOpIdx) {
     // No custom match class. Just use the register class.
     Record *ClassRec = Rec->getValueAsDef("RegClass");
     if (!ClassRec)
-      throw TGError(Rec->getLoc(), "RegisterOperand `" + Rec->getName() +
+      PrintFatalError(Rec->getLoc(), "RegisterOperand `" + Rec->getName() +
                     "' has no associated register class!\n");
     if (ClassInfo *CI = RegisterClassClasses[ClassRec])
       return CI;
-    throw TGError(Rec->getLoc(), "register class has no class info!");
+    PrintFatalError(Rec->getLoc(), "register class has no class info!");
   }
 
 
   if (Rec->isSubClassOf("RegisterClass")) {
     if (ClassInfo *CI = RegisterClassClasses[Rec])
       return CI;
-    throw TGError(Rec->getLoc(), "register class has no class info!");
+    PrintFatalError(Rec->getLoc(), "register class has no class info!");
   }
 
   if (!Rec->isSubClassOf("Operand"))
-    throw TGError(Rec->getLoc(), "Operand `" + Rec->getName() +
+    PrintFatalError(Rec->getLoc(), "Operand `" + Rec->getName() +
                   "' does not derive from class Operand!\n");
   Record *MatchClass = Rec->getValueAsDef("ParserMatchClass");
   if (ClassInfo *CI = AsmOperandClasses[MatchClass])
     return CI;
 
-  throw TGError(Rec->getLoc(), "operand has no match class!");
+  PrintFatalError(Rec->getLoc(), "operand has no match class!");
 }
 
 void AsmMatcherInfo::
@@ -1185,7 +1185,7 @@ void AsmMatcherInfo::buildOperandClasses() {
 
     ListInit *Supers = (*it)->getValueAsListInit("SuperClasses");
     for (unsigned i = 0, e = Supers->getSize(); i != e; ++i) {
-      DefInit *DI = dynamic_cast<DefInit*>(Supers->getElement(i));
+      DefInit *DI = dyn_cast<DefInit>(Supers->getElement(i));
       if (!DI) {
         PrintError((*it)->getLoc(), "Invalid super class reference!");
         continue;
@@ -1203,33 +1203,31 @@ void AsmMatcherInfo::buildOperandClasses() {
 
     // Get or construct the predicate method name.
     Init *PMName = (*it)->getValueInit("PredicateMethod");
-    if (StringInit *SI = dynamic_cast<StringInit*>(PMName)) {
+    if (StringInit *SI = dyn_cast<StringInit>(PMName)) {
       CI->PredicateMethod = SI->getValue();
     } else {
-      assert(dynamic_cast<UnsetInit*>(PMName) &&
-             "Unexpected PredicateMethod field!");
+      assert(isa<UnsetInit>(PMName) && "Unexpected PredicateMethod field!");
       CI->PredicateMethod = "is" + CI->ClassName;
     }
 
     // Get or construct the render method name.
     Init *RMName = (*it)->getValueInit("RenderMethod");
-    if (StringInit *SI = dynamic_cast<StringInit*>(RMName)) {
+    if (StringInit *SI = dyn_cast<StringInit>(RMName)) {
       CI->RenderMethod = SI->getValue();
     } else {
-      assert(dynamic_cast<UnsetInit*>(RMName) &&
-             "Unexpected RenderMethod field!");
+      assert(isa<UnsetInit>(RMName) && "Unexpected RenderMethod field!");
       CI->RenderMethod = "add" + CI->ClassName + "Operands";
     }
 
     // Get the parse method name or leave it as empty.
     Init *PRMName = (*it)->getValueInit("ParserMethod");
-    if (StringInit *SI = dynamic_cast<StringInit*>(PRMName))
+    if (StringInit *SI = dyn_cast<StringInit>(PRMName))
       CI->ParserMethod = SI->getValue();
 
     // Get the diagnostic type or leave it as empty.
     // Get the parse method name or leave it as empty.
     Init *DiagnosticType = (*it)->getValueInit("DiagnosticType");
-    if (StringInit *SI = dynamic_cast<StringInit*>(DiagnosticType))
+    if (StringInit *SI = dyn_cast<StringInit>(DiagnosticType))
       CI->DiagnosticType = SI->getValue();
 
     AsmOperandClasses[*it] = CI;
@@ -1289,7 +1287,7 @@ void AsmMatcherInfo::buildInfo() {
       continue;
 
     if (Pred->getName().empty())
-      throw TGError(Pred->getLoc(), "Predicate has no name!");
+      PrintFatalError(Pred->getLoc(), "Predicate has no name!");
 
     unsigned FeatureNo = SubtargetFeatures.size();
     SubtargetFeatures[Pred] = new SubtargetFeatureInfo(Pred, FeatureNo);
@@ -1470,7 +1468,7 @@ void AsmMatcherInfo::buildInfo() {
     ClassInfo *FromClass = getTokenClass(Rec->getValueAsString("FromToken"));
     ClassInfo *ToClass = getTokenClass(Rec->getValueAsString("ToToken"));
     if (FromClass == ToClass)
-      throw TGError(Rec->getLoc(),
+      PrintFatalError(Rec->getLoc(),
                     "error: Destination value identical to source value.");
     FromClass->SuperClasses.push_back(ToClass);
   }
@@ -1492,7 +1490,7 @@ buildInstructionOperandReference(MatchableInfo *II,
   // Map this token to an operand.
   unsigned Idx;
   if (!Operands.hasOperandNamed(OperandName, Idx))
-    throw TGError(II->TheDef->getLoc(), "error: unable to find operand: '" +
+    PrintFatalError(II->TheDef->getLoc(), "error: unable to find operand: '" +
                   OperandName.str() + "'");
 
   // If the instruction operand has multiple suboperands, but the parser
@@ -1563,7 +1561,7 @@ void AsmMatcherInfo::buildAliasOperandReference(MatchableInfo *II,
       return;
     }
 
-  throw TGError(II->TheDef->getLoc(), "error: unable to find operand: '" +
+  PrintFatalError(II->TheDef->getLoc(), "error: unable to find operand: '" +
                 OperandName.str() + "'");
 }
 
@@ -1585,7 +1583,7 @@ void MatchableInfo::buildInstructionResultOperands() {
     // Find out what operand from the asmparser this MCInst operand comes from.
     int SrcOperand = findAsmOperandNamed(OpInfo.Name);
     if (OpInfo.Name.empty() || SrcOperand == -1)
-      throw TGError(TheDef->getLoc(), "Instruction '" +
+      PrintFatalError(TheDef->getLoc(), "Instruction '" +
                     TheDef->getName() + "' has operand '" + OpInfo.Name +
                     "' that doesn't appear in asm string!");
 
@@ -1637,7 +1635,7 @@ void MatchableInfo::buildAliasResultOperands() {
         StringRef Name = CGA.ResultOperands[AliasOpNo].getName();
         int SrcOperand = findAsmOperand(Name, SubIdx);
         if (SrcOperand == -1)
-          throw TGError(TheDef->getLoc(), "Instruction '" +
+          PrintFatalError(TheDef->getLoc(), "Instruction '" +
                         TheDef->getName() + "' has operand '" + OpName +
                         "' that doesn't appear in asm string!");
         unsigned NumOperands = (SubIdx == -1 ? OpInfo->MINumOperands : 1);
@@ -1674,9 +1672,9 @@ static unsigned getConverterOperandID(const std::string &Name,
 }
 
 
-static void emitConvertToMCInst(CodeGenTarget &Target, StringRef ClassName,
-                                std::vector<MatchableInfo*> &Infos,
-                                raw_ostream &OS) {
+static void emitConvertFuncs(CodeGenTarget &Target, StringRef ClassName,
+                             std::vector<MatchableInfo*> &Infos,
+                             raw_ostream &OS) {
   SetVector<std::string> OperandConversionKinds;
   SetVector<std::string> InstructionConversionKinds;
   std::vector<std::vector<uint8_t> > ConversionTable;
@@ -1713,29 +1711,23 @@ static void emitConvertToMCInst(CodeGenTarget &Target, StringRef ClassName,
   std::string OperandFnBody;
   raw_string_ostream OpOS(OperandFnBody);
   // Start the operand number lookup function.
-  OpOS << "unsigned " << Target.getName() << ClassName << "::\n"
-       << "getMCInstOperandNum(unsigned Kind,\n"
-       << "                    const SmallVectorImpl<MCParsedAsmOperand*> "
-       << "&Operands,\n                    unsigned OperandNum, unsigned "
-       << "&NumMCOperands) {\n"
+  OpOS << "void " << Target.getName() << ClassName << "::\n"
+       << "convertToMapAndConstraints(unsigned Kind,\n";
+  OpOS.indent(27);
+  OpOS << "const SmallVectorImpl<MCParsedAsmOperand*> &Operands) {\n"
        << "  assert(Kind < CVT_NUM_SIGNATURES && \"Invalid signature!\");\n"
-       << "  NumMCOperands = 0;\n"
-       << "  unsigned MCOperandNum = 0;\n"
+       << "  unsigned NumMCOperands = 0;\n"
        << "  const uint8_t *Converter = ConversionTable[Kind];\n"
        << "  for (const uint8_t *p = Converter; *p; p+= 2) {\n"
-       << "    if (*(p + 1) > OperandNum) continue;\n"
        << "    switch (*p) {\n"
        << "    default: llvm_unreachable(\"invalid conversion entry!\");\n"
        << "    case CVT_Reg:\n"
-       << "      if (*(p + 1) == OperandNum) {\n"
-       << "        NumMCOperands = 1;\n"
-       << "        break;\n"
-       << "      }\n"
-       << "      ++MCOperandNum;\n"
+       << "      Operands[*(p + 1)]->setMCOperandNum(NumMCOperands);\n"
+       << "      Operands[*(p + 1)]->setConstraint(\"m\");\n"
+       << "      ++NumMCOperands;\n"
        << "      break;\n"
        << "    case CVT_Tied:\n"
-       << "      // FIXME: Tied operand calculation not supported.\n"
-       << "      assert (0 && \"getMCInstOperandNumImpl() doesn't support tied operands, yet!\");\n"
+       << "      ++NumMCOperands;\n"
        << "      break;\n";
 
   // Pre-populate the operand conversion kinds with the standard always
@@ -1831,11 +1823,9 @@ static void emitConvertToMCInst(CodeGenTarget &Target, StringRef ClassName,
 
         // Add a handler for the operand number lookup.
         OpOS << "    case " << Name << ":\n"
-             << "      if (*(p + 1) == OperandNum) {\n"
-             << "        NumMCOperands = " << OpInfo.MINumOperands << ";\n"
-             << "        break;\n"
-             << "      }\n"
-             << "      MCOperandNum += " << OpInfo.MINumOperands << ";\n"
+             << "      Operands[*(p + 1)]->setMCOperandNum(NumMCOperands);\n"
+             << "      Operands[*(p + 1)]->setConstraint(\"m\");\n"
+             << "      NumMCOperands += " << OpInfo.MINumOperands << ";\n"
              << "      break;\n";
         break;
       }
@@ -1872,11 +1862,9 @@ static void emitConvertToMCInst(CodeGenTarget &Target, StringRef ClassName,
               << "      break;\n";
 
         OpOS << "    case " << Name << ":\n"
-             << "      if (*(p + 1) == OperandNum) {\n"
-             << "        NumMCOperands = 1;\n"
-             << "        break;\n"
-             << "      }\n"
-             << "      ++MCOperandNum;\n"
+             << "      Operands[*(p + 1)]->setMCOperandNum(NumMCOperands);\n"
+             << "      Operands[*(p + 1)]->setConstraint(\"\");\n"
+             << "      ++NumMCOperands;\n"
              << "      break;\n";
         break;
       }
@@ -1905,11 +1893,9 @@ static void emitConvertToMCInst(CodeGenTarget &Target, StringRef ClassName,
               << "      break;\n";
 
         OpOS << "    case " << Name << ":\n"
-             << "      if (*(p + 1) == OperandNum) {\n"
-             << "        NumMCOperands = 1;\n"
-             << "        break;\n"
-             << "      }\n"
-             << "      ++MCOperandNum;\n"
+             << "      Operands[*(p + 1)]->setMCOperandNum(NumMCOperands);\n"
+             << "      Operands[*(p + 1)]->setConstraint(\"m\");\n"
+             << "      ++NumMCOperands;\n"
              << "      break;\n";
       }
       }
@@ -1934,7 +1920,7 @@ static void emitConvertToMCInst(CodeGenTarget &Target, StringRef ClassName,
   CvtOS << "    }\n  }\n}\n\n";
 
   // Finish up the operand number lookup function.
-  OpOS << "    }\n  }\n  return MCOperandNum;\n}\n\n";
+  OpOS << "    }\n  }\n}\n\n";
 
   OS << "namespace {\n";
 
@@ -2284,7 +2270,7 @@ static std::string GetAliasRequiredFeatures(Record *R,
     SubtargetFeatureInfo *F = Info.getSubtargetFeature(ReqFeatures[i]);
 
     if (F == 0)
-      throw TGError(R->getLoc(), "Predicate '" + ReqFeatures[i]->getName() +
+      PrintFatalError(R->getLoc(), "Predicate '" + ReqFeatures[i]->getName() +
                     "' is not marked as an AssemblerPredicate!");
 
     if (NumFeatures)
@@ -2347,14 +2333,14 @@ static bool emitMnemonicAliases(raw_ostream &OS, const AsmMatcherInfo &Info) {
           // We can't have two aliases from the same mnemonic with no predicate.
           PrintError(ToVec[AliasWithNoPredicate]->getLoc(),
                      "two MnemonicAliases with the same 'from' mnemonic!");
-          throw TGError(R->getLoc(), "this is the other MnemonicAlias.");
+          PrintFatalError(R->getLoc(), "this is the other MnemonicAlias.");
         }
 
         AliasWithNoPredicate = i;
         continue;
       }
       if (R->getValueAsString("ToMnemonic") == I->first)
-        throw TGError(R->getLoc(), "MnemonicAlias to the same string");
+        PrintFatalError(R->getLoc(), "MnemonicAlias to the same string");
 
       if (!MatchCode.empty())
         MatchCode += "else ";
@@ -2615,17 +2601,18 @@ void AsmMatcherEmitter::run(raw_ostream &OS) {
   OS << "  unsigned ComputeAvailableFeatures(uint64_t FeatureBits) const;\n";
   OS << "  void convertToMCInst(unsigned Kind, MCInst &Inst, "
      << "unsigned Opcode,\n"
-     << "                          const SmallVectorImpl<MCParsedAsmOperand*> "
+     << "                       const SmallVectorImpl<MCParsedAsmOperand*> "
      << "&Operands);\n";
-  OS << "  unsigned getMCInstOperandNum(unsigned Kind,\n"
-     << "                       const "
-     << "SmallVectorImpl<MCParsedAsmOperand*> &Operands,\n                     "
-     << "      unsigned OperandNum, unsigned &NumMCOperands);\n";
+  OS << "  void convertToMapAndConstraints(unsigned Kind,\n                ";
+  OS << "           const SmallVectorImpl<MCParsedAsmOperand*> &Operands);\n";
   OS << "  bool mnemonicIsValid(StringRef Mnemonic);\n";
-  OS << "  unsigned MatchInstructionImpl(\n"
-     << "    const SmallVectorImpl<MCParsedAsmOperand*> &Operands,\n"
-     << "    unsigned &Kind, MCInst &Inst, "
-     << "unsigned &ErrorInfo,\n    unsigned VariantID = 0);\n";
+  OS << "  unsigned MatchInstructionImpl(\n";
+  OS.indent(27);
+  OS << "const SmallVectorImpl<MCParsedAsmOperand*> &Operands,\n"
+     << "                                MCInst &Inst,\n"
+     << "                                unsigned &ErrorInfo,"
+     << " bool matchingInlineAsm,\n"
+     << "                                unsigned VariantID = 0);\n";
 
   if (Info.OperandMatchInfo.size()) {
     OS << "\n  enum OperandMatchResultTy {\n";
@@ -2678,8 +2665,10 @@ void AsmMatcherEmitter::run(raw_ostream &OS) {
   // Generate the function that remaps for mnemonic aliases.
   bool HasMnemonicAliases = emitMnemonicAliases(OS, Info);
 
-  // Generate the unified function to convert operands into an MCInst.
-  emitConvertToMCInst(Target, ClassName, Info.Matchables, OS);
+  // Generate the convertToMCInst function to convert operands into an MCInst.
+  // Also, generate the convertToMapAndConstraints function for MS-style inline
+  // assembly.  The latter doesn't actually generate a MCInst.
+  emitConvertFuncs(Target, ClassName, Info.Matchables, OS);
 
   // Emit the enumeration for classes which participate in matching.
   emitMatchClassEnumeration(Target, Info.Classes, OS);
@@ -2813,8 +2802,8 @@ void AsmMatcherEmitter::run(raw_ostream &OS) {
      << Target.getName() << ClassName << "::\n"
      << "MatchInstructionImpl(const SmallVectorImpl<MCParsedAsmOperand*>"
      << " &Operands,\n";
-  OS << "                     unsigned &Kind, MCInst &Inst, unsigned ";
-  OS << "&ErrorInfo,\n                     unsigned VariantID) {\n";
+  OS << "                     MCInst &Inst,\n"
+     << "unsigned &ErrorInfo, bool matchingInlineAsm, unsigned VariantID) {\n";
 
   OS << "  // Eliminate obvious mismatches.\n";
   OS << "  if (Operands.size() > " << (MaxNumOperands+1) << ") {\n";
@@ -2908,6 +2897,11 @@ void AsmMatcherEmitter::run(raw_ostream &OS) {
   OS << "      continue;\n";
   OS << "    }\n";
   OS << "\n";
+  OS << "    if (matchingInlineAsm) {\n";
+  OS << "      Inst.setOpcode(it->Opcode);\n";
+  OS << "      convertToMapAndConstraints(it->ConvertFn, Operands);\n";
+  OS << "      return Match_Success;\n";
+  OS << "    }\n\n";
   OS << "    // We have selected a definite instruction, convert the parsed\n"
      << "    // operands into the appropriate MCInst.\n";
   OS << "    convertToMCInst(it->ConvertFn, Inst, it->Opcode, Operands);\n";
@@ -2931,7 +2925,6 @@ void AsmMatcherEmitter::run(raw_ostream &OS) {
   if (!InsnCleanupFn.empty())
     OS << "    " << InsnCleanupFn << "(Inst);\n";
 
-  OS << "    Kind = it->ConvertFn;\n";
   OS << "    return Match_Success;\n";
   OS << "  }\n\n";
 

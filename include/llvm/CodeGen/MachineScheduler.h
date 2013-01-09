@@ -31,7 +31,6 @@
 #include "llvm/CodeGen/RegisterPressure.h"
 #include "llvm/CodeGen/ScheduleDAGInstrs.h"
 #include "llvm/Target/TargetInstrInfo.h"
-#include "llvm/MC/MCInstrItineraries.h"
 
 namespace llvm {
 
@@ -111,6 +110,10 @@ public:
   /// Initialize the strategy after building the DAG for a new region.
   virtual void initialize(ScheduleDAGMI *DAG) = 0;
 
+  /// Notify this strategy that all roots have been released (including those
+  /// that depend on EntrySU or ExitSU).
+  virtual void registerRoots() {}
+
   /// Pick the next node to schedule, or return NULL. Set IsTopNode to true to
   /// schedule the node at the top of the unscheduled region. Otherwise it will
   /// be scheduled at the bottom.
@@ -151,6 +154,8 @@ public:
 
   bool empty() const { return Queue.empty(); }
 
+  void clear() { Queue.clear(); }
+
   unsigned size() const { return Queue.size(); }
 
   typedef std::vector<SUnit*>::iterator iterator;
@@ -168,10 +173,12 @@ public:
     SU->NodeQueueId |= ID;
   }
 
-  void remove(iterator I) {
+  iterator remove(iterator I) {
     (*I)->NodeQueueId &= ~ID;
     *I = Queue.back();
+    unsigned idx = I - Queue.begin();
     Queue.pop_back();
+    return Queue.begin() + idx;
   }
 
 #ifndef NDEBUG
@@ -278,19 +285,6 @@ public:
     return RegionCriticalPSets;
   }
 
-  /// getIssueWidth - Return the max instructions per scheduling group.
-  unsigned getIssueWidth() const {
-    return (InstrItins && InstrItins->SchedModel)
-      ? InstrItins->SchedModel->IssueWidth : 1;
-  }
-
-  /// getNumMicroOps - Return the number of issue slots required for this MI.
-  unsigned getNumMicroOps(MachineInstr *MI) const {
-    if (!InstrItins) return 1;
-    int UOps = InstrItins->getNumMicroOps(MI->getDesc().getSchedClass());
-    return (UOps >= 0) ? UOps : TII->getNumMicroOps(InstrItins, MI);
-  }
-
 protected:
   // Top-Level entry points for the schedule() driver...
 
@@ -315,6 +309,9 @@ protected:
 
   /// Reinsert debug_values recorded in ScheduleDAGInstrs::DbgValues.
   void placeDebugValues();
+
+  /// \brief dump the scheduled Sequence.
+  void dumpSchedule() const;
 
   // Lesser helpers...
 

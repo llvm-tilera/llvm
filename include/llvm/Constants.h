@@ -221,7 +221,6 @@ public:
   }
 
   /// @brief Methods to support type inquiry through isa, cast, and dyn_cast.
-  static inline bool classof(const ConstantInt *) { return true; }
   static bool classof(const Value *V) {
     return V->getValueID() == ConstantIntVal;
   }
@@ -283,15 +282,11 @@ public:
 
   bool isExactlyValue(double V) const {
     bool ignored;
-    // convert is not supported on this type
-    if (&Val.getSemantics() == &APFloat::PPCDoubleDouble)
-      return false;
     APFloat FV(V);
     FV.convert(Val.getSemantics(), APFloat::rmNearestTiesToEven, &ignored);
     return isExactlyValue(FV);
   }
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const ConstantFP *) { return true; }
   static bool classof(const Value *V) {
     return V->getValueID() == ConstantFPVal;
   }
@@ -334,7 +329,6 @@ public:
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   ///
-  static bool classof(const ConstantAggregateZero *) { return true; }
   static bool classof(const Value *V) {
     return V->getValueID() == ConstantAggregateZeroVal;
   }
@@ -367,7 +361,6 @@ public:
   virtual void replaceUsesOfWithOnConstant(Value *From, Value *To, Use *U);
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const ConstantArray *) { return true; }
   static bool classof(const Value *V) {
     return V->getValueID() == ConstantArrayVal;
   }
@@ -426,7 +419,6 @@ public:
   virtual void replaceUsesOfWithOnConstant(Value *From, Value *To, Use *U);
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const ConstantStruct *) { return true; }
   static bool classof(const Value *V) {
     return V->getValueID() == ConstantStructVal;
   }
@@ -474,7 +466,6 @@ public:
   virtual void replaceUsesOfWithOnConstant(Value *From, Value *To, Use *U);
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const ConstantVector *) { return true; }
   static bool classof(const Value *V) {
     return V->getValueID() == ConstantVectorVal;
   }
@@ -517,7 +508,6 @@ public:
   }
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const ConstantPointerNull *) { return true; }
   static bool classof(const Value *V) {
     return V->getValueID() == ConstantPointerNullVal;
   }
@@ -639,7 +629,6 @@ public:
   
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   ///
-  static bool classof(const ConstantDataSequential *) { return true; }
   static bool classof(const Value *V) {
     return V->getValueID() == ConstantDataArrayVal ||
            V->getValueID() == ConstantDataVectorVal;
@@ -695,7 +684,6 @@ public:
   
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   ///
-  static bool classof(const ConstantDataArray *) { return true; }
   static bool classof(const Value *V) {
     return V->getValueID() == ConstantDataArrayVal;
   }
@@ -749,7 +737,6 @@ public:
   
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   ///
-  static bool classof(const ConstantDataVector *) { return true; }
   static bool classof(const Value *V) {
     return V->getValueID() == ConstantDataVectorVal;
   }
@@ -781,7 +768,6 @@ public:
   virtual void replaceUsesOfWithOnConstant(Value *From, Value *To, Use *U);
   
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const BlockAddress *) { return true; }
   static inline bool classof(const Value *V) {
     return V->getValueID() == BlockAddressVal;
   }
@@ -1094,7 +1080,6 @@ public:
   virtual void replaceUsesOfWithOnConstant(Value *From, Value *To, Use *U);
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const ConstantExpr *) { return true; }
   static inline bool classof(const Value *V) {
     return V->getValueID() == ConstantExprVal;
   }
@@ -1159,7 +1144,6 @@ public:
   virtual void destroyConstant();
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const UndefValue *) { return true; }
   static bool classof(const Value *V) {
     return V->getValueID() == UndefValueVal;
   }

@@ -15,7 +15,6 @@
 #define DEBUG_TYPE "mips-asm-printer"
 #include "Mips.h"
 #include "MipsAsmPrinter.h"
-#include "MipsDirectObjLower.h"
 #include "MipsInstrInfo.h"
 #include "MipsMCInstLower.h"
 #include "InstPrinter/MipsInstPrinter.h"
@@ -38,7 +37,7 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Target/Mangler.h"
-#include "llvm/Target/TargetData.h"
+#include "llvm/DataLayout.h"
 #include "llvm/Target/TargetLoweringObjectFile.h"
 #include "llvm/Target/TargetOptions.h"
 
@@ -76,22 +75,6 @@ void MipsAsmPrinter::EmitInstruction(const MachineInstr *MI) {
   do {
     MCInst TmpInst0;
     MCInstLowering.Lower(I++, TmpInst0);
-
-    // Direct object specific instruction lowering
-    if (!OutStreamer.hasRawTextSupport()){
-      switch (TmpInst0.getOpcode()) {
-      // If shift amount is >= 32 it the inst needs to be lowered further
-      case Mips::DSLL:
-      case Mips::DSRL:
-      case Mips::DSRA:
-        Mips::LowerLargeShift(TmpInst0);
-        break;
-        // Double extract instruction is chosen by pos and size operands
-      case Mips::DEXT:
-      case Mips::DINS:
-        Mips::LowerDextDins(TmpInst0);
-      }
-    }
 
     OutStreamer.EmitInstruction(TmpInst0);
   } while ((I != E) && I->isInsideBundle()); // Delay slot check
@@ -256,8 +239,7 @@ void MipsAsmPrinter::EmitFunctionBodyStart() {
 
     OutStreamer.EmitRawText(StringRef("\t.set\tnoreorder"));
     OutStreamer.EmitRawText(StringRef("\t.set\tnomacro"));
-    if (MipsFI->getEmitNOAT())
-      OutStreamer.EmitRawText(StringRef("\t.set\tnoat"));
+    OutStreamer.EmitRawText(StringRef("\t.set\tnoat"));
   }
 }
 
@@ -268,9 +250,7 @@ void MipsAsmPrinter::EmitFunctionBodyEnd() {
   // always be at the function end, and we can't emit and
   // break with BB logic.
   if (OutStreamer.hasRawTextSupport()) {
-    if (MipsFI->getEmitNOAT())
-      OutStreamer.EmitRawText(StringRef("\t.set\tat"));
-
+    OutStreamer.EmitRawText(StringRef("\t.set\tat"));
     OutStreamer.EmitRawText(StringRef("\t.set\tmacro"));
     OutStreamer.EmitRawText(StringRef("\t.set\treorder"));
     OutStreamer.EmitRawText("\t.end\t" + Twine(CurrentFnSym->getName()));

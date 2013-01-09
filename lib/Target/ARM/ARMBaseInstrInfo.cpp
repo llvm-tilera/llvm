@@ -702,6 +702,8 @@ void ARMBaseInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
     Opc = ARM::VMOVD, BeginIdx = ARM::dsub_0, SubRegs = 3;
   else if (ARM::DQuadRegClass.contains(DestReg, SrcReg))
     Opc = ARM::VMOVD, BeginIdx = ARM::dsub_0, SubRegs = 4;
+  else if (ARM::GPRPairRegClass.contains(DestReg, SrcReg))
+    Opc = ARM::MOVr, BeginIdx = ARM::gsub_0, SubRegs = 2;
 
   else if (ARM::DPairSpcRegClass.contains(DestReg, SrcReg))
     Opc = ARM::VMOVD, BeginIdx = ARM::dsub_0, SubRegs = 2, Spacing = 2;
@@ -791,6 +793,13 @@ storeRegToStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
         AddDefaultPred(BuildMI(MBB, I, DL, get(ARM::VSTRD))
                    .addReg(SrcReg, getKillRegState(isKill))
                    .addFrameIndex(FI).addImm(0).addMemOperand(MMO));
+      } else if (ARM::GPRPairRegClass.hasSubClassEq(RC)) {
+        MachineInstrBuilder MIB =
+          AddDefaultPred(BuildMI(MBB, I, DL, get(ARM::STMIA))
+                       .addFrameIndex(FI))
+                       .addMemOperand(MMO);
+          MIB = AddDReg(MIB, SrcReg, ARM::gsub_0, getKillRegState(isKill), TRI);
+                AddDReg(MIB, SrcReg, ARM::gsub_1, 0, TRI);
       } else
         llvm_unreachable("Unknown reg class!");
       break;
@@ -938,6 +947,7 @@ loadRegFromStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
   DebugLoc DL;
   if (I != MBB.end()) DL = I->getDebugLoc();
   MachineFunction &MF = *MBB.getParent();
+  ARMFunctionInfo *AFI = MF.getInfo<ARMFunctionInfo>();
   MachineFrameInfo &MFI = *MF.getFrameInfo();
   unsigned Align = MFI.getObjectAlignment(FI);
   MachineMemOperand *MMO =
@@ -963,6 +973,15 @@ loadRegFromStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
     if (ARM::DPRRegClass.hasSubClassEq(RC)) {
       AddDefaultPred(BuildMI(MBB, I, DL, get(ARM::VLDRD), DestReg)
                    .addFrameIndex(FI).addImm(0).addMemOperand(MMO));
+    } else if (ARM::GPRPairRegClass.hasSubClassEq(RC)) {
+      unsigned LdmOpc = AFI->isThumbFunction() ? ARM::t2LDMIA : ARM::LDMIA;
+      MachineInstrBuilder MIB =
+        AddDefaultPred(BuildMI(MBB, I, DL, get(LdmOpc))
+                    .addFrameIndex(FI).addImm(0).addMemOperand(MMO));
+      MIB = AddDReg(MIB, DestReg, ARM::gsub_0, RegState::DefineNoRead, TRI);
+      MIB = AddDReg(MIB, DestReg, ARM::gsub_1, RegState::DefineNoRead, TRI);
+      if (TargetRegisterInfo::isPhysicalRegister(DestReg))
+        MIB.addReg(DestReg, RegState::ImplicitDefine);
     } else
       llvm_unreachable("Unknown reg class!");
     break;
@@ -3302,7 +3321,8 @@ ARMBaseInstrInfo::getOperandLatency(const InstrItineraryData *ItinData,
     // instructions).
     if (Latency > 0 && Subtarget.isThumb2()) {
       const MachineFunction *MF = DefMI->getParent()->getParent();
-      if (MF->getFunction()->getFnAttributes().hasOptimizeForSizeAttr())
+      if (MF->getFunction()->getFnAttributes().
+            hasAttribute(Attributes::OptimizeForSize))
         --Latency;
     }
     return Latency;
@@ -3549,18 +3569,6 @@ ARMBaseInstrInfo::getOperandLatency(const InstrItineraryData *ItinData,
   return Latency;
 }
 
-unsigned
-ARMBaseInstrInfo::getOutputLatency(const InstrItineraryData *ItinData,
-                                   const MachineInstr *DefMI, unsigned DefIdx,
-                                   const MachineInstr *DepMI) const {
-  unsigned Reg = DefMI->getOperand(DefIdx).getReg();
-  if (DepMI->readsRegister(Reg, &getRegisterInfo()) || !isPredicated(DepMI))
-    return 1;
-
-  // If the second MI is predicated, then there is an implicit use dependency.
-  return getInstrLatency(ItinData, DefMI);
-}
-
 unsigned ARMBaseInstrInfo::getInstrLatency(const InstrItineraryData *ItinData,
                                            const MachineInstr *MI,
                                            unsigned *PredCost) const {
@@ -3758,7 +3766,7 @@ static unsigned getCorrespondingDRegAndLane(const TargetRegisterInfo *TRI,
   return DReg;
 }
 
-/// getImplicitSPRUseForDPRUse - Given a use of a DPR register and lane, 
+/// getImplicitSPRUseForDPRUse - Given a use of a DPR register and lane,
 /// set ImplicitSReg to a register number that must be marked as implicit-use or
 /// zero if no register needs to be defined as implicit-use.
 ///
@@ -3766,13 +3774,13 @@ static unsigned getCorrespondingDRegAndLane(const TargetRegisterInfo *TRI,
 /// not, it returns false.
 ///
 /// This function handles cases where an instruction is being modified from taking
-/// an SPR to a DPR[Lane]. A use of the DPR is being added, which may conflict 
+/// an SPR to a DPR[Lane]. A use of the DPR is being added, which may conflict
 /// with an earlier def of an SPR corresponding to DPR[Lane^1] (i.e. the other
 /// lane of the DPR).
 ///
 /// If the other SPR is defined, an implicit-use of it should be added. Else,
 /// (including the case where the DPR itself is defined), it should not.
-/// 
+///
 static bool getImplicitSPRUseForDPRUse(const TargetRegisterInfo *TRI,
                                        MachineInstr *MI,
                                        unsigned DReg, unsigned Lane,

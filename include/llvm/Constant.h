@@ -65,6 +65,9 @@ public:
   /// true for things like constant expressions that could divide by zero.
   bool canTrap() const;
 
+  /// isThreadDependent - Return true if the value can vary between threads.
+  bool isThreadDependent() const;
+
   /// isConstantUsed - Return true if the constant has users other than constant
   /// exprs and other dangling things.
   bool isConstantUsed() const;
@@ -108,8 +111,6 @@ public:
   virtual void destroyConstant() { llvm_unreachable("Not reached!"); }
 
   //// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const Constant *) { return true; }
-  static inline bool classof(const GlobalValue *) { return true; }
   static inline bool classof(const Value *V) {
     return V->getValueID() >= ConstantFirstVal &&
            V->getValueID() <= ConstantLastVal;
