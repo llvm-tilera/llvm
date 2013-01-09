@@ -189,7 +189,6 @@ public:
   }
   
   // Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const InlineAsm *) { return true; }
   static inline bool classof(const Value *V) {
     return V->getValueID() == Value::InlineAsmVal;
   }
@@ -215,6 +214,8 @@ public:
     Extra_HasSideEffects = 1,
     Extra_IsAlignStack = 2,
     Extra_AsmDialect = 4,
+    Extra_MayLoad = 8,
+    Extra_MayStore = 16,
 
     // Inline asm operands map to multiple SDNode / MachineInstr operands.
     // The first operand is an immediate describing the asm operand, the low

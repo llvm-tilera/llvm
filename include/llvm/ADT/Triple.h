@@ -66,7 +66,9 @@ public:
     nvptx64, // NVPTX: 64-bit
     le32,    // le32: generic little-endian 32-bit CPU (PNaCl / Emscripten)
     amdil,   // amdil: amd IL
-    tile64  // Tile64: tile64
+    spir,    // SPIR: standard portable IR for OpenCL 32-bit version
+    spir64,  // SPIR: standard portable IR for OpenCL 64-bit version
+    tile64   // Tile64: tile64
   };
   enum VendorType {
     UnknownVendor,
@@ -76,7 +78,8 @@ public:
     SCEI,
     BGP,
     BGQ,
-    Freescale
+    Freescale,
+    IBM
   };
   enum OSType {
     UnknownOS,
@@ -101,7 +104,8 @@ public:
     RTEMS,
     NativeClient,
     CNK,         // BG/P Compute-Node Kernel
-    Bitrig
+    Bitrig,
+    AIX
   };
   enum EnvironmentType {
     UnknownEnvironment,
@@ -111,7 +115,8 @@ public:
     GNUEABIHF,
     EABI,
     MachO,
-    Android
+    Android,
+    ELF
   };
 
 private:
@@ -422,11 +427,6 @@ public:
   /// getArchTypeForLLVMName - The canonical type for the given LLVM
   /// architecture name (e.g., "x86").
   static ArchType getArchTypeForLLVMName(StringRef Str);
-
-  /// getArchTypeForDarwinArchName - Get the architecture type for a "Darwin"
-  /// architecture name, for example as accepted by "gcc -arch" (see also
-  /// arch(3)).
-  static ArchType getArchTypeForDarwinArchName(StringRef Str);
 
   /// @}
 };

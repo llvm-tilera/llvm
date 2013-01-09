@@ -54,12 +54,13 @@
 #include "llvm/Support/ELF.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/MapVector.h"
 using namespace llvm;
 
 namespace {
   class PPCAsmPrinter : public AsmPrinter {
   protected:
-    DenseMap<MCSymbol*, MCSymbol*> TOC;
+    MapVector<MCSymbol*, MCSymbol*> TOC;
     const PPCSubtarget &Subtarget;
     uint64_t TOCLabelID;
   public:
@@ -284,8 +285,22 @@ bool PPCAsmPrinter::PrintAsmMemoryOperand(const MachineInstr *MI, unsigned OpNo,
                                           unsigned AsmVariant,
                                           const char *ExtraCode,
                                           raw_ostream &O) {
-  if (ExtraCode && ExtraCode[0])
-    return true; // Unknown modifier.
+  if (ExtraCode && ExtraCode[0]) {
+    if (ExtraCode[1] != 0) return true; // Unknown modifier.
+
+    switch (ExtraCode[0]) {
+    default: return true;  // Unknown modifier.
+    case 'y': // A memory reference for an X-form instruction
+      {
+        const char *RegName = "r0";
+        if (!Subtarget.isDarwin()) RegName = stripRegisterPrefix(RegName);
+        O << RegName << ", ";
+        printOperand(MI, OpNo, O);
+        return false;
+      }
+    }
+  }
+
   assert(MI->getOperand(OpNo).isReg());
   O << "0(";
   printOperand(MI, OpNo, O);
@@ -420,10 +435,14 @@ void PPCLinuxAsmPrinter::EmitFunctionEntryLabel() {
   OutStreamer.EmitValueToAlignment(8);
   MCSymbol *Symbol1 = 
     OutContext.GetOrCreateSymbol(".L." + Twine(CurrentFnSym->getName()));
-  MCSymbol *Symbol2 = OutContext.GetOrCreateSymbol(StringRef(".TOC.@tocbase"));
+  // Generates a R_PPC64_ADDR64 (from FK_DATA_8) relocation for the function
+  // entry point.
   OutStreamer.EmitValue(MCSymbolRefExpr::Create(Symbol1, OutContext),
                         8/*size*/, 0/*addrspace*/);
-  OutStreamer.EmitValue(MCSymbolRefExpr::Create(Symbol2, OutContext),
+  MCSymbol *Symbol2 = OutContext.GetOrCreateSymbol(StringRef(".TOC."));
+  // Generates a R_PPC64_TOC relocation for TOC base insertion.
+  OutStreamer.EmitValue(MCSymbolRefExpr::Create(Symbol2,
+                        MCSymbolRefExpr::VK_PPC_TOC, OutContext),
                         8/*size*/, 0/*addrspace*/);
   // Emit a null environment pointer.
   OutStreamer.EmitIntValue(0, 8 /* size */, 0 /* addrspace */);
@@ -437,7 +456,7 @@ void PPCLinuxAsmPrinter::EmitFunctionEntryLabel() {
 
 
 bool PPCLinuxAsmPrinter::doFinalization(Module &M) {
-  const TargetData *TD = TM.getTargetData();
+  const DataLayout *TD = TM.getDataLayout();
 
   bool isPPC64 = TD->getPointerSizeInBits() == 64;
 
@@ -447,12 +466,11 @@ bool PPCLinuxAsmPrinter::doFinalization(Module &M) {
         SectionKind::getReadOnly());
     OutStreamer.SwitchSection(Section);
 
-    // FIXME: This is nondeterminstic!
-    for (DenseMap<MCSymbol*, MCSymbol*>::iterator I = TOC.begin(),
+    for (MapVector<MCSymbol*, MCSymbol*>::iterator I = TOC.begin(),
          E = TOC.end(); I != E; ++I) {
       OutStreamer.EmitLabel(I->second);
-      OutStreamer.EmitRawText("\t.tc " + Twine(I->first->getName()) +
-                              "[TC]," + I->first->getName());
+      MCSymbol *S = OutContext.GetOrCreateSymbol(I->first->getName());
+      OutStreamer.EmitTCEntry(*S);
     }
   }
 
@@ -545,7 +563,7 @@ static MCSymbol *GetAnonSym(MCSymbol *Sym, MCContext &Ctx) {
 
 void PPCDarwinAsmPrinter::
 EmitFunctionStubs(const MachineModuleInfoMachO::SymbolListTy &Stubs) {
-  bool isPPC64 = TM.getTargetData()->getPointerSizeInBits() == 64;
+  bool isPPC64 = TM.getDataLayout()->getPointerSizeInBits() == 64;
   
   const TargetLoweringObjectFileMachO &TLOFMacho = 
     static_cast<const TargetLoweringObjectFileMachO &>(getObjFileLowering());
@@ -640,7 +658,7 @@ EmitFunctionStubs(const MachineModuleInfoMachO::SymbolListTy &Stubs) {
 
 
 bool PPCDarwinAsmPrinter::doFinalization(Module &M) {
-  bool isPPC64 = TM.getTargetData()->getPointerSizeInBits() == 64;
+  bool isPPC64 = TM.getDataLayout()->getPointerSizeInBits() == 64;
 
   // Darwin/PPC always uses mach-o.
   const TargetLoweringObjectFileMachO &TLOFMacho = 

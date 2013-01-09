@@ -253,15 +253,17 @@ public:
 
   // Implementation of the MCTargetAsmParser interface:
   bool ParseRegister(unsigned &RegNo, SMLoc &StartLoc, SMLoc &EndLoc);
-  bool ParseInstruction(StringRef Name, SMLoc NameLoc,
+  bool ParseInstruction(ParseInstructionInfo &Info, StringRef Name,
+                        SMLoc NameLoc,
                         SmallVectorImpl<MCParsedAsmOperand*> &Operands);
   bool ParseDirective(AsmToken DirectiveID);
 
   unsigned checkTargetMatchPredicate(MCInst &Inst);
 
-  bool MatchAndEmitInstruction(SMLoc IDLoc,
+  bool MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
                                SmallVectorImpl<MCParsedAsmOperand*> &Operands,
-                               MCStreamer &Out);
+                               MCStreamer &Out, unsigned &ErrorInfo,
+                               bool MatchingInlineAsm);
 };
 } // end anonymous namespace
 
@@ -3372,7 +3374,8 @@ ARMAsmParser::OperandMatchResultTy ARMAsmParser::
 parseMSRMaskOperand(SmallVectorImpl<MCParsedAsmOperand*> &Operands) {
   SMLoc S = Parser.getTok().getLoc();
   const AsmToken &Tok = Parser.getTok();
-  assert(Tok.is(AsmToken::Identifier) && "Token is not an Identifier");
+  if (!Tok.is(AsmToken::Identifier))
+    return MatchOperand_NoMatch;
   StringRef Mask = Tok.getString();
 
   if (isMClass()) {
@@ -4952,7 +4955,8 @@ static bool doesIgnoreDataTypeSuffix(StringRef Mnemonic, StringRef DT) {
 
 static void applyMnemonicAliases(StringRef &Mnemonic, unsigned Features);
 /// Parse an arm instruction mnemonic followed by its operands.
-bool ARMAsmParser::ParseInstruction(StringRef Name, SMLoc NameLoc,
+bool ARMAsmParser::ParseInstruction(ParseInstructionInfo &Info, StringRef Name,
+                                    SMLoc NameLoc,
                                SmallVectorImpl<MCParsedAsmOperand*> &Operands) {
   // Apply mnemonic aliases before doing anything else, as the destination
   // mnemnonic may include suffices and we want to handle them normally.
@@ -7473,15 +7477,14 @@ unsigned ARMAsmParser::checkTargetMatchPredicate(MCInst &Inst) {
 
 static const char *getSubtargetFeatureName(unsigned Val);
 bool ARMAsmParser::
-MatchAndEmitInstruction(SMLoc IDLoc,
+MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
                         SmallVectorImpl<MCParsedAsmOperand*> &Operands,
-                        MCStreamer &Out) {
+                        MCStreamer &Out, unsigned &ErrorInfo,
+                        bool MatchingInlineAsm) {
   MCInst Inst;
-  unsigned Kind;
-  unsigned ErrorInfo;
   unsigned MatchResult;
-
-  MatchResult = MatchInstructionImpl(Operands, Kind, Inst, ErrorInfo);
+  MatchResult = MatchInstructionImpl(Operands, Inst, ErrorInfo,
+                                     MatchingInlineAsm);
   switch (MatchResult) {
   default: break;
   case Match_Success:

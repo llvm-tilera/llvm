@@ -42,6 +42,7 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/DynamicLibrary.h"
 #include "llvm/Support/Memory.h"
+#include "llvm/Support/MathExtras.h"
 #include <cerrno>
 
 #ifdef __linux__
@@ -171,6 +172,23 @@ namespace {
     cl::init(false));
 
   cl::opt<bool>
+  GenerateSoftFloatCalls("soft-float",
+    cl::desc("Generate software floating point library calls"),
+    cl::init(false));
+
+  cl::opt<llvm::FloatABI::ABIType>
+  FloatABIForCalls("float-abi",
+                   cl::desc("Choose float ABI type"),
+                   cl::init(FloatABI::Default),
+                   cl::values(
+                     clEnumValN(FloatABI::Default, "default",
+                                "Target default float ABI type"),
+                     clEnumValN(FloatABI::Soft, "soft",
+                                "Soft float ABI (implied by -soft-float)"),
+                     clEnumValN(FloatABI::Hard, "hard",
+                                "Hard float ABI (uses FP registers)"),
+                     clEnumValEnd));
+  cl::opt<bool>
 // In debug builds, make this default to true.
 #ifdef NDEBUG
 #define EMIT_DEBUG false
@@ -224,7 +242,7 @@ public:
   // the data cache but not to the instruction cache.
   virtual void invalidateInstructionCache();
 
-  // The MCJITMemoryManager doesn't use the following functions, so we don't
+  // The RTDyldMemoryManager doesn't use the following functions, so we don't
   // need implement them.
   virtual void setMemoryWritable() {
     llvm_unreachable("Unexpected call!");
@@ -286,9 +304,16 @@ uint8_t *LLIMCJITMemoryManager::allocateDataSection(uintptr_t Size,
                                                     unsigned SectionID) {
   if (!Alignment)
     Alignment = 16;
-  uint8_t *Addr = (uint8_t*)calloc((Size + Alignment - 1)/Alignment, Alignment);
-  AllocatedDataMem.push_back(sys::MemoryBlock(Addr, Size));
-  return Addr;
+  // Ensure that enough memory is requested to allow aligning.
+  size_t NumElementsAligned = 1 + (Size + Alignment - 1)/Alignment;
+  uint8_t *Addr = (uint8_t*)calloc(NumElementsAligned, Alignment);
+
+  // Honour the alignment requirement.
+  uint8_t *AlignedAddr = (uint8_t*)RoundUpToAlignment((uint64_t)Addr, Alignment);
+
+  // Store the original address from calloc so we can free it later.
+  AllocatedDataMem.push_back(sys::MemoryBlock(Addr, NumElementsAligned*Alignment));
+  return AlignedAddr;
 }
 
 uint8_t *LLIMCJITMemoryManager::allocateCodeSection(uintptr_t Size,
@@ -338,6 +363,10 @@ void LLIMCJITMemoryManager::invalidateInstructionCache() {
                                             AllocatedCodeMem[i].size());
 }
 
+static int jit_noop() {
+  return 0;
+}
+
 void *LLIMCJITMemoryManager::getPointerToNamedFunction(const std::string &Name,
                                                        bool AbortOnFailure) {
 #if defined(__linux__)
@@ -359,6 +388,14 @@ void *LLIMCJITMemoryManager::getPointerToNamedFunction(const std::string &Name,
   if (Name == "atexit") return (void*)(intptr_t)&atexit;
   if (Name == "mknod") return (void*)(intptr_t)&mknod;
 #endif // __linux__
+
+  // We should not invoke parent's ctors/dtors from generated main()!
+  // On Mingw and Cygwin, the symbol __main is resolved to
+  // callee's(eg. tools/lli) one, to invoke wrong duplicated ctors
+  // (and register wrong callee's dtors with atexit(3)).
+  // We expect ExecutionEngine::runStaticConstructorsDestructors()
+  // is called before ExecutionEngine::runFunctionAsMain() is called.
+  if (Name == "__main") return (void*)(intptr_t)&jit_noop;
 
   const char *NameStr = Name.c_str();
   void *Ptr = sys::DynamicLibrary::SearchForAddressOfSymbol(NameStr);
@@ -435,9 +472,13 @@ void layoutRemoteTargetMemory(RemoteTarget *T, RecordingMemoryManager *JMM) {
     EE->mapSectionAddress(const_cast<void*>(Offsets[i].first), Addr);
 
     DEBUG(dbgs() << "  Mapping local: " << Offsets[i].first
-                 << " to remote: " << format("%#018x", Addr) << "\n");
+                 << " to remote: " << format("%p", Addr) << "\n");
 
   }
+
+  // Trigger application of relocations
+  EE->finalizeObject();
+
   // Now load it all to the target.
   for (unsigned i = 0, e = Offsets.size(); i != e; ++i) {
     uint64_t Addr = RemoteAddr + Offsets[i].second;
@@ -446,12 +487,12 @@ void layoutRemoteTargetMemory(RemoteTarget *T, RecordingMemoryManager *JMM) {
       T->loadCode(Addr, Offsets[i].first, Sizes[i]);
 
       DEBUG(dbgs() << "  loading code: " << Offsets[i].first
-            << " to remote: " << format("%#018x", Addr) << "\n");
+            << " to remote: " << format("%p", Addr) << "\n");
     } else {
       T->loadData(Addr, Offsets[i].first, Sizes[i]);
 
       DEBUG(dbgs() << "  loading data: " << Offsets[i].first
-            << " to remote: " << format("%#018x", Addr) << "\n");
+            << " to remote: " << format("%p", Addr) << "\n");
     }
 
   }
@@ -471,6 +512,7 @@ int main(int argc, char **argv, char * const *envp) {
   // usable by the JIT.
   InitializeNativeTarget();
   InitializeNativeTargetAsmPrinter();
+  InitializeNativeTargetAsmParser();
 
   cl::ParseCommandLineOptions(argc, argv,
                               "llvm interpreter & dynamic compiler\n");
@@ -543,14 +585,21 @@ int main(int argc, char **argv, char * const *envp) {
   }
   builder.setOptLevel(OLvl);
 
+  TargetOptions Options;
+  Options.UseSoftFloat = GenerateSoftFloatCalls;
+  if (FloatABIForCalls != FloatABI::Default)
+    Options.FloatABIType = FloatABIForCalls;
+  if (GenerateSoftFloatCalls)
+    FloatABIForCalls = FloatABI::Soft;
+
   // Remote target execution doesn't handle EH or debug registration.
   if (!RemoteMCJIT) {
-    TargetOptions Options;
     Options.JITExceptionHandling = EnableJITExceptionHandling;
     Options.JITEmitDebugInfo = EmitJitDebugInfo;
     Options.JITEmitDebugInfoToDisk = EmitJitDebugInfoToDisk;
-    builder.setTargetOptions(Options);
   }
+
+  builder.setTargetOptions(Options);
 
   EE = builder.create();
   if (!EE) {
@@ -649,7 +698,7 @@ int main(int argc, char **argv, char * const *envp) {
     uint64_t Entry = (uint64_t)EE->getPointerToFunction(EntryFn);
 
     DEBUG(dbgs() << "Executing '" << EntryFn->getName() << "' at "
-                 << format("%#18x", Entry) << "\n");
+                 << format("%p", Entry) << "\n");
 
     if (Target.executeCode(Entry, Result))
       errs() << "ERROR: " << Target.getErrorMsg() << "\n";

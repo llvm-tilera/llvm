@@ -80,7 +80,6 @@ namespace {
     BlockSet FunctionBlocks;
 
     BitVector regsReserved;
-    BitVector regsAllocatable;
     RegSet regsLive;
     RegVector regsDefined, regsDead, regsKilled;
     RegMaskVector regMasks;
@@ -186,7 +185,7 @@ namespace {
     }
 
     bool isAllocatable(unsigned Reg) {
-      return Reg < regsAllocatable.size() && regsAllocatable.test(Reg);
+      return Reg < TRI->getNumRegs() && MRI->isAllocatable(Reg);
     }
 
     // Analysis information if available
@@ -427,7 +426,7 @@ void MachineVerifier::markReachable(const MachineBasicBlock *MBB) {
 
 void MachineVerifier::visitMachineFunctionBefore() {
   lastIndex = SlotIndex();
-  regsReserved = TRI->getReservedRegs(*MF);
+  regsReserved = MRI->getReservedRegs();
 
   // A sub-register of a reserved register is also reserved
   for (int Reg = regsReserved.find_first(); Reg>=0;
@@ -438,8 +437,6 @@ void MachineVerifier::visitMachineFunctionBefore() {
       regsReserved.set(*SubRegs);
     }
   }
-
-  regsAllocatable = TRI->getAllocatableSet(*MF);
 
   markReachable(&MF->front());
 
@@ -710,8 +707,9 @@ void MachineVerifier::verifyInlineAsm(const MachineInstr *MI) {
     report("Asm string must be an external symbol", MI);
   if (!MI->getOperand(1).isImm())
     report("Asm flags must be an immediate", MI);
-  // Allowed flags are Extra_HasSideEffects = 1, and Extra_IsAlignStack = 2.
-  if (!isUInt<2>(MI->getOperand(1).getImm()))
+  // Allowed flags are Extra_HasSideEffects = 1, Extra_IsAlignStack = 2,
+  // Extra_AsmDialect = 4, Extra_MayLoad = 8, and Extra_MayStore = 16.
+  if (!isUInt<5>(MI->getOperand(1).getImm()))
     report("Unknown asm flags", &MI->getOperand(1), 1);
 
   assert(InlineAsm::MIOp_FirstOperand == 2 && "Asm format changed");

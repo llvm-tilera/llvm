@@ -1,5 +1,5 @@
 ; RUN: opt < %s -sroa -S | FileCheck %s
-target datalayout = "E-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:32:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-n8:16:32:64"
+target datalayout = "e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:32:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-n8:16:32:64"
 
 %S1 = type { i64, [42 x float] }
 
@@ -189,3 +189,79 @@ entry:
 
 declare void @llvm.memcpy.p0i8.p0i8.i32(i8* nocapture, i8* nocapture, i32, i32, i1) nounwind
 declare void @llvm.memset.p0i8.i32(i8* nocapture, i8, i32, i32, i1) nounwind
+
+define i64 @test6(<4 x i64> %x, <4 x i64> %y, i64 %n) {
+; CHECK: @test6
+; The old scalarrepl pass would wrongly drop the store to the second alloca.
+; PR13254
+  %tmp = alloca { <4 x i64>, <4 x i64> }
+  %p0 = getelementptr inbounds { <4 x i64>, <4 x i64> }* %tmp, i32 0, i32 0
+  store <4 x i64> %x, <4 x i64>* %p0
+; CHECK: store <4 x i64> %x,
+  %p1 = getelementptr inbounds { <4 x i64>, <4 x i64> }* %tmp, i32 0, i32 1
+  store <4 x i64> %y, <4 x i64>* %p1
+; CHECK: store <4 x i64> %y,
+  %addr = getelementptr inbounds { <4 x i64>, <4 x i64> }* %tmp, i32 0, i32 0, i64 %n
+  %res = load i64* %addr, align 4
+  ret i64 %res
+}
+
+define i32 @PR14212() {
+; CHECK: @PR14212
+; This caused a crash when "splitting" the load of the i32 in order to promote
+; the store of <3 x i8> properly. Heavily reduced from an OpenCL test case.
+entry:
+  %retval = alloca <3 x i8>, align 4
+; CHECK-NOT: alloca
+
+  store <3 x i8> undef, <3 x i8>* %retval, align 4
+  %cast = bitcast <3 x i8>* %retval to i32*
+  %load = load i32* %cast, align 4
+  ret i32 %load
+; CHECK: ret i32
+}
+
+define <2 x i8> @PR14349.1(i32 %x) {
+; CEHCK: @PR14349.1
+; The first testcase for broken SROA rewriting of split integer loads and
+; stores due to smaller vector loads and stores. This particular test ensures
+; that we can rewrite a split store of an integer to a store of a vector.
+entry:
+  %a = alloca i32
+; CHECK-NOT: alloca
+
+  store i32 %x, i32* %a
+; CHECK-NOT: store
+
+  %cast = bitcast i32* %a to <2 x i8>*
+  %vec = load <2 x i8>* %cast
+; CHECK-NOT: load
+
+  ret <2 x i8> %vec
+; CHECK: %[[trunc:.*]] = trunc i32 %x to i16
+; CHECK: %[[cast:.*]] = bitcast i16 %[[trunc]] to <2 x i8>
+; CHECK: ret <2 x i8> %[[cast]]
+}
+
+define i32 @PR14349.2(<2 x i8> %x) {
+; CEHCK: @PR14349.2
+; The first testcase for broken SROA rewriting of split integer loads and
+; stores due to smaller vector loads and stores. This particular test ensures
+; that we can rewrite a split load of an integer to a load of a vector.
+entry:
+  %a = alloca i32
+; CHECK-NOT: alloca
+
+  %cast = bitcast i32* %a to <2 x i8>*
+  store <2 x i8> %x, <2 x i8>* %cast
+; CHECK-NOT: store
+
+  %int = load i32* %a
+; CHECK-NOT: load
+
+  ret i32 %int
+; CHECK: %[[cast:.*]] = bitcast <2 x i8> %x to i16
+; CHECK: %[[trunc:.*]] = zext i16 %[[cast]] to i32
+; CHECK: %[[insert:.*]] = or i32 %{{.*}}, %[[trunc]]
+; CHECK: ret i32 %[[insert]]
+}

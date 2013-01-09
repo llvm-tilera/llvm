@@ -68,7 +68,8 @@ endif
 
 ifeq ($(MAKECMDGOALS),install-clang)
   DIRS := tools/clang/tools/driver tools/clang/lib/Headers \
-          tools/clang/tools/libclang tools/clang/tools/c-index-test \
+          tools/clang/tools/libclang \
+          tools/clang/tools/c-index-test \
           tools/clang/include/clang-c \
           tools/clang/runtime tools/clang/docs \
           tools/lto runtime

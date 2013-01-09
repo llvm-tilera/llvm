@@ -31,10 +31,11 @@
 #include "llvm/Attributes.h"
 #include "llvm/Support/CFG.h"
 #include "llvm/Pass.h"
-#include "llvm/Target/TargetData.h"
+#include "llvm/DataLayout.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/Statistic.h"
+#include "llvm/TargetTransformInfo.h"
 using namespace llvm;
 
 STATISTIC(NumSimpl, "Number of blocks simplified");
@@ -293,7 +294,8 @@ static bool mergeEmptyReturnBlocks(Function &F) {
 
 /// iterativelySimplifyCFG - Call SimplifyCFG on all the blocks in the function,
 /// iterating until no more changes are made.
-static bool iterativelySimplifyCFG(Function &F, const TargetData *TD) {
+static bool iterativelySimplifyCFG(Function &F, const DataLayout *TD,
+                                   const TargetTransformInfo *TTI) {
   bool Changed = false;
   bool LocalChange = true;
   while (LocalChange) {
@@ -302,7 +304,7 @@ static bool iterativelySimplifyCFG(Function &F, const TargetData *TD) {
     // Loop over all of the basic blocks and remove them if they are unneeded...
     //
     for (Function::iterator BBIt = F.begin(); BBIt != F.end(); ) {
-      if (SimplifyCFG(BBIt++, TD)) {
+      if (SimplifyCFG(BBIt++, TD, TTI)) {
         LocalChange = true;
         ++NumSimpl;
       }
@@ -316,10 +318,12 @@ static bool iterativelySimplifyCFG(Function &F, const TargetData *TD) {
 // simplify the CFG.
 //
 bool CFGSimplifyPass::runOnFunction(Function &F) {
-  const TargetData *TD = getAnalysisIfAvailable<TargetData>();
+  const DataLayout *TD = getAnalysisIfAvailable<DataLayout>();
+  const TargetTransformInfo *TTI =
+      getAnalysisIfAvailable<TargetTransformInfo>();
   bool EverChanged = removeUnreachableBlocksFromFn(F);
   EverChanged |= mergeEmptyReturnBlocks(F);
-  EverChanged |= iterativelySimplifyCFG(F, TD);
+  EverChanged |= iterativelySimplifyCFG(F, TD, TTI);
 
   // If neither pass changed anything, we're done.
   if (!EverChanged) return false;
@@ -333,7 +337,7 @@ bool CFGSimplifyPass::runOnFunction(Function &F) {
     return true;
 
   do {
-    EverChanged = iterativelySimplifyCFG(F, TD);
+    EverChanged = iterativelySimplifyCFG(F, TD, TTI);
     EverChanged |= removeUnreachableBlocksFromFn(F);
   } while (EverChanged);
 
