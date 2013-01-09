@@ -704,6 +704,7 @@ ENABLE_PIC
 ENABLE_SHARED
 ENABLE_EMBED_STDCXX
 ENABLE_TIMESTAMPS
+ENABLE_BACKTRACES
 TARGETS_TO_BUILD
 LLVM_ENUM_TARGETS
 LLVM_ENUM_ASM_PRINTERS
@@ -790,6 +791,7 @@ OCAML_LIBDIR
 ENABLE_VISIBILITY_INLINES_HIDDEN
 RPATH
 RDYNAMIC
+program_prefix
 LIBOBJS
 LTLIBOBJS'
 ac_subst_files=''
@@ -3902,8 +3904,8 @@ else
   sparc*-*)               llvm_cv_target_arch="Sparc" ;;
   powerpc*-*)             llvm_cv_target_arch="PowerPC" ;;
   arm*-*)                 llvm_cv_target_arch="ARM" ;;
-  mips-*)                 llvm_cv_target_arch="Mips" ;;
-  mipsel-*)               llvm_cv_target_arch="Mips" ;;
+  mips-* | mips64-*)      llvm_cv_target_arch="Mips" ;;
+  mipsel-* | mips64el-*)  llvm_cv_target_arch="Mips" ;;
   xcore-*)                llvm_cv_target_arch="XCore" ;;
   msp430-*)               llvm_cv_target_arch="MSP430" ;;
   hexagon-*)              llvm_cv_target_arch="Hexagon" ;;
@@ -3936,8 +3938,8 @@ case $host in
   sparc*-*)               host_arch="Sparc" ;;
   powerpc*-*)             host_arch="PowerPC" ;;
   arm*-*)                 host_arch="ARM" ;;
-  mips-*)                 host_arch="Mips" ;;
-  mipsel-*)               host_arch="Mips" ;;
+  mips-* | mips64-*)      host_arch="Mips" ;;
+  mipsel-* | mips64el-*)  host_arch="Mips" ;;
   xcore-*)                host_arch="XCore" ;;
   msp430-*)               host_arch="MSP430" ;;
   hexagon-*)              host_arch="Hexagon" ;;
@@ -5392,11 +5394,11 @@ else
 fi
 
 case "$enableval" in
-  yes) ENABLE_TIMESTAMPS=1
+  yes) ENABLE_BACKTRACES=1
  ;;
-  no)  ENABLE_TIMESTAMPS=0
+  no)  ENABLE_BACKTRACES=0
  ;;
-  default) ENABLE_TIMESTAMPS=1
+  default) ENABLE_BACKTRACES=1
  ;;
   *) { { echo "$as_me:$LINENO: error: Invalid setting for --enable-backtraces. Use \"yes\" or \"no\"" >&5
 echo "$as_me: error: Invalid setting for --enable-backtraces. Use \"yes\" or \"no\"" >&2;}
@@ -5430,6 +5432,8 @@ case "$enableval" in
         arm)      TARGETS_TO_BUILD="ARM $TARGETS_TO_BUILD" ;;
         mips)     TARGETS_TO_BUILD="Mips $TARGETS_TO_BUILD" ;;
         mipsel)   TARGETS_TO_BUILD="Mips $TARGETS_TO_BUILD" ;;
+        mips64)   TARGETS_TO_BUILD="Mips $TARGETS_TO_BUILD" ;;
+        mips64el) TARGETS_TO_BUILD="Mips $TARGETS_TO_BUILD" ;;
         spu)      TARGETS_TO_BUILD="CellSPU $TARGETS_TO_BUILD" ;;
         xcore)    TARGETS_TO_BUILD="XCore $TARGETS_TO_BUILD" ;;
         msp430)   TARGETS_TO_BUILD="MSP430 $TARGETS_TO_BUILD" ;;
@@ -10317,7 +10321,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<EOF
-#line 10315 "configure"
+#line 10317 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -21132,6 +21136,10 @@ fi
 ac_config_files="$ac_config_files bindings/ocaml/llvm/META.llvm"
 
 
+test "x$program_prefix" = "xNONE" && program_prefix=""
+
+
+
 ac_config_commands="$ac_config_commands setup"
 
 ac_config_commands="$ac_config_commands Makefile"
@@ -21969,6 +21977,7 @@ ENABLE_PIC!$ENABLE_PIC$ac_delim
 ENABLE_SHARED!$ENABLE_SHARED$ac_delim
 ENABLE_EMBED_STDCXX!$ENABLE_EMBED_STDCXX$ac_delim
 ENABLE_TIMESTAMPS!$ENABLE_TIMESTAMPS$ac_delim
+ENABLE_BACKTRACES!$ENABLE_BACKTRACES$ac_delim
 TARGETS_TO_BUILD!$TARGETS_TO_BUILD$ac_delim
 LLVM_ENUM_TARGETS!$LLVM_ENUM_TARGETS$ac_delim
 LLVM_ENUM_ASM_PRINTERS!$LLVM_ENUM_ASM_PRINTERS$ac_delim
@@ -22055,11 +22064,12 @@ OCAML_LIBDIR!$OCAML_LIBDIR$ac_delim
 ENABLE_VISIBILITY_INLINES_HIDDEN!$ENABLE_VISIBILITY_INLINES_HIDDEN$ac_delim
 RPATH!$RPATH$ac_delim
 RDYNAMIC!$RDYNAMIC$ac_delim
+program_prefix!$program_prefix$ac_delim
 LIBOBJS!$LIBOBJS$ac_delim
 LTLIBOBJS!$LTLIBOBJS$ac_delim
 _ACEOF
 
-  if test `sed -n "s/.*$ac_delim\$/X/p" conf$$subs.sed | grep -c X` = 93; then
+  if test `sed -n "s/.*$ac_delim\$/X/p" conf$$subs.sed | grep -c X` = 95; then
     break
   elif $ac_last_try; then
     { { echo "$as_me:$LINENO: error: could not make $CONFIG_STATUS" >&5

@@ -98,25 +98,10 @@ private:
   /// MCID NULL and no operands.
   MachineInstr();
 
-  // The next two constructors have DebugLoc and non-DebugLoc versions;
-  // over time, the non-DebugLoc versions should be phased out and eventually
-  // removed.
-
-  /// MachineInstr ctor - This constructor creates a MachineInstr and adds the
-  /// implicit operands.  It reserves space for the number of operands specified
-  /// by the MCInstrDesc.  The version with a DebugLoc should be preferred.
-  explicit MachineInstr(const MCInstrDesc &MCID, bool NoImp = false);
-
-  /// MachineInstr ctor - Work exactly the same as the ctor above, except that
-  /// the MachineInstr is created and added to the end of the specified basic
-  /// block.  The version with a DebugLoc should be preferred.
-  MachineInstr(MachineBasicBlock *MBB, const MCInstrDesc &MCID);
-
   /// MachineInstr ctor - This constructor create a MachineInstr and add the
   /// implicit operands.  It reserves space for number of operands specified by
   /// MCInstrDesc.  An explicit DebugLoc is supplied.
-  explicit MachineInstr(const MCInstrDesc &MCID, const DebugLoc dl,
-                        bool NoImp = false);
+  MachineInstr(const MCInstrDesc &MCID, const DebugLoc dl, bool NoImp = false);
 
   /// MachineInstr ctor - Work exactly the same as the ctor above, except that
   /// the MachineInstr is created and added to the end of the specified basic
@@ -460,6 +445,11 @@ public:
   /// Instructions with this flag set are not necessarily simple load
   /// instructions, they may load a value and modify it, for example.
   bool mayLoad(QueryType Type = AnyInBundle) const {
+    if (isInlineAsm()) {
+      unsigned ExtraInfo = getOperand(InlineAsm::MIOp_ExtraInfo).getImm();
+      if (ExtraInfo & InlineAsm::Extra_MayLoad)
+        return true;
+    }
     return hasProperty(MCID::MayLoad, Type);
   }
 
@@ -469,6 +459,11 @@ public:
   /// instructions, they may store a modified value based on their operands, or
   /// may not actually modify anything, for example.
   bool mayStore(QueryType Type = AnyInBundle) const {
+    if (isInlineAsm()) {
+      unsigned ExtraInfo = getOperand(InlineAsm::MIOp_ExtraInfo).getImm();
+      if (ExtraInfo & InlineAsm::Extra_MayStore)
+        return true;
+    }
     return hasProperty(MCID::MayStore, Type);
   }
 

@@ -566,9 +566,9 @@ emitRegisterNameString(raw_ostream &O, StringRef AltName,
         std::vector<std::string> AltNames =
           Reg.TheDef->getValueAsListOfStrings("AltNames");
         if (AltNames.size() <= Idx)
-          throw TGError(Reg.TheDef->getLoc(),
-                        (Twine("Register definition missing alt name for '") +
-                        AltName + "'.").str());
+          PrintFatalError(Reg.TheDef->getLoc(),
+            (Twine("Register definition missing alt name for '") +
+             AltName + "'.").str());
         AsmName = AltNames[Idx];
       }
     }
@@ -792,7 +792,7 @@ void AsmWriterEmitter::EmitPrintAliasInstruction(raw_ostream &O) {
     if (!R->getValueAsBit("EmitAlias"))
       continue; // We were told not to emit the alias, but to emit the aliasee.
     const DagInit *DI = R->getValueAsDag("ResultInst");
-    const DefInit *Op = dynamic_cast<const DefInit*>(DI->getOperator());
+    const DefInit *Op = cast<DefInit>(DI->getOperator());
     AliasMap[getQualifiedName(Op->getDef())].push_back(Alias);
   }
 

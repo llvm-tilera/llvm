@@ -1,5 +1,5 @@
 ; RUN: opt < %s -sroa -S | FileCheck %s
-target datalayout = "E-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:32:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-n8:16:32:64"
+target datalayout = "e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:32:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-n8:16:32:64"
 
 define i32 @test1() {
 ; CHECK: @test1
@@ -59,15 +59,24 @@ entry:
 	%a = alloca [2 x i32]
 ; CHECK-NOT: alloca
 
+  ; Note that we build redundant GEPs here to ensure that having different GEPs
+  ; into the same alloca partation continues to work with PHI speculation. This
+  ; was the underlying cause of PR13926.
   %a0 = getelementptr [2 x i32]* %a, i64 0, i32 0
+  %a0b = getelementptr [2 x i32]* %a, i64 0, i32 0
   %a1 = getelementptr [2 x i32]* %a, i64 0, i32 1
+  %a1b = getelementptr [2 x i32]* %a, i64 0, i32 1
 	store i32 0, i32* %a0
 	store i32 1, i32* %a1
 ; CHECK-NOT: store
 
   switch i32 %x, label %bb0 [ i32 1, label %bb1
                               i32 2, label %bb2
-                              i32 3, label %bb3 ]
+                              i32 3, label %bb3
+                              i32 4, label %bb4
+                              i32 5, label %bb5
+                              i32 6, label %bb6
+                              i32 7, label %bb7 ]
 
 bb0:
 	br label %exit
@@ -77,10 +86,19 @@ bb2:
 	br label %exit
 bb3:
 	br label %exit
+bb4:
+	br label %exit
+bb5:
+	br label %exit
+bb6:
+	br label %exit
+bb7:
+	br label %exit
 
 exit:
-	%phi = phi i32* [ %a1, %bb0 ], [ %a0, %bb1 ], [ %a0, %bb2 ], [ %a1, %bb3 ]
-; CHECK: phi i32 [ 1, %{{.*}} ], [ 0, %{{.*}} ], [ 0, %{{.*}} ], [ 1, %{{.*}} ]
+	%phi = phi i32* [ %a1, %bb0 ], [ %a0, %bb1 ], [ %a0, %bb2 ], [ %a1, %bb3 ],
+                  [ %a1b, %bb4 ], [ %a0b, %bb5 ], [ %a0b, %bb6 ], [ %a1b, %bb7 ]
+; CHECK: phi i32 [ 1, %{{.*}} ], [ 0, %{{.*}} ], [ 0, %{{.*}} ], [ 1, %{{.*}} ], [ 1, %{{.*}} ], [ 0, %{{.*}} ], [ 0, %{{.*}} ], [ 1, %{{.*}} ]
 
 	%result = load i32* %phi
 	ret i32 %result
@@ -238,17 +256,17 @@ entry:
   ret i32 %loaded
 }
 
-define i32 @test10(i32 %b, i32* %ptr) {
+define float @test10(i32 %b, float* %ptr) {
 ; Don't try to promote allocas which are not elligible for it even after
 ; rewriting due to the necessity of inserting bitcasts when speculating a PHI
 ; node.
 ; CHECK: @test10
 ; CHECK: %[[alloca:.*]] = alloca
-; CHECK: %[[argvalue:.*]] = load i32* %ptr
-; CHECK: %[[cast:.*]] = bitcast double* %[[alloca]] to i32*
-; CHECK: %[[allocavalue:.*]] = load i32* %[[cast]]
-; CHECK: %[[result:.*]] = phi i32 [ %[[allocavalue]], %else ], [ %[[argvalue]], %then ]
-; CHECK-NEXT: ret i32 %[[result]]
+; CHECK: %[[argvalue:.*]] = load float* %ptr
+; CHECK: %[[cast:.*]] = bitcast double* %[[alloca]] to float*
+; CHECK: %[[allocavalue:.*]] = load float* %[[cast]]
+; CHECK: %[[result:.*]] = phi float [ %[[allocavalue]], %else ], [ %[[argvalue]], %then ]
+; CHECK-NEXT: ret float %[[result]]
 
 entry:
   %f = alloca double
@@ -260,34 +278,34 @@ then:
   br label %exit
 
 else:
-  %bitcast = bitcast double* %f to i32*
+  %bitcast = bitcast double* %f to float*
   br label %exit
 
 exit:
-  %phi = phi i32* [ %bitcast, %else ], [ %ptr, %then ]
-  %loaded = load i32* %phi, align 4
-  ret i32 %loaded
+  %phi = phi float* [ %bitcast, %else ], [ %ptr, %then ]
+  %loaded = load float* %phi, align 4
+  ret float %loaded
 }
 
-define i32 @test11(i32 %b, i32* %ptr) {
+define float @test11(i32 %b, float* %ptr) {
 ; Same as @test10 but for a select rather than a PHI node.
 ; CHECK: @test11
 ; CHECK: %[[alloca:.*]] = alloca
-; CHECK: %[[cast:.*]] = bitcast double* %[[alloca]] to i32*
-; CHECK: %[[allocavalue:.*]] = load i32* %[[cast]]
-; CHECK: %[[argvalue:.*]] = load i32* %ptr
-; CHECK: %[[result:.*]] = select i1 %{{.*}}, i32 %[[allocavalue]], i32 %[[argvalue]]
-; CHECK-NEXT: ret i32 %[[result]]
+; CHECK: %[[cast:.*]] = bitcast double* %[[alloca]] to float*
+; CHECK: %[[allocavalue:.*]] = load float* %[[cast]]
+; CHECK: %[[argvalue:.*]] = load float* %ptr
+; CHECK: %[[result:.*]] = select i1 %{{.*}}, float %[[allocavalue]], float %[[argvalue]]
+; CHECK-NEXT: ret float %[[result]]
 
 entry:
   %f = alloca double
   store double 0.0, double* %f
-  store i32 0, i32* %ptr
+  store float 0.0, float* %ptr
   %test = icmp ne i32 %b, 0
-  %bitcast = bitcast double* %f to i32*
-  %select = select i1 %test, i32* %bitcast, i32* %ptr
-  %loaded = load i32* %select, align 4
-  ret i32 %loaded
+  %bitcast = bitcast double* %f to float*
+  %select = select i1 %test, float* %bitcast, float* %ptr
+  %loaded = load float* %select, align 4
+  ret float %loaded
 }
 
 define i32 @test12(i32 %x, i32* %p) {
@@ -371,4 +389,39 @@ for.cond:
 if.then:
   %tmpcast.d.0 = select i1 undef, i32* %c, i32* %d.0
   br label %for.cond
+}
+
+define i64 @PR14132(i1 %flag) {
+; CHECK: @PR14132
+; Here we form a PHI-node by promoting the pointer alloca first, and then in
+; order to promote the other two allocas, we speculate the load of the
+; now-phi-node-pointer. In doing so we end up loading a 64-bit value from an i8
+; alloca, which is completely bogus. However, we were asserting on trying to
+; rewrite it. Now it is replaced with undef. Eventually we may replace it with
+; unrechable and even the CFG will go away here.
+entry:
+  %a = alloca i64
+  %b = alloca i8
+  %ptr = alloca i64*
+; CHECK-NOT: alloca
+
+  %ptr.cast = bitcast i64** %ptr to i8**
+  store i64 0, i64* %a
+  store i8 1, i8* %b
+  store i64* %a, i64** %ptr
+  br i1 %flag, label %if.then, label %if.end
+
+if.then:
+  store i8* %b, i8** %ptr.cast
+  br label %if.end
+
+if.end:
+  %tmp = load i64** %ptr
+  %result = load i64* %tmp
+; CHECK-NOT: store
+; CHECK-NOT: load
+; CHECK: %[[result:.*]] = phi i64 [ undef, %if.then ], [ 0, %entry ]
+
+  ret i64 %result
+; CHECK-NEXT: ret i64 %[[result]]
 }

@@ -11,6 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+#define DEBUG_TYPE "subtarget-emitter"
+
 #include "CodeGenTarget.h"
 #include "CodeGenSchedule.h"
 #include "llvm/ADT/StringExtras.h"
@@ -621,10 +623,10 @@ void SubtargetEmitter::EmitProcessorResources(const CodeGenProcModel &ProcModel,
                                               raw_ostream &OS) {
   char Sep = ProcModel.ProcResourceDefs.empty() ? ' ' : ',';
 
-  OS << "\n// {Name, NumUnits, SuperIdx}\n";
+  OS << "\n// {Name, NumUnits, SuperIdx, IsBuffered}\n";
   OS << "static const llvm::MCProcResourceDesc "
      << ProcModel.ModelName << "ProcResources" << "[] = {\n"
-     << "  {DBGFIELD(\"InvalidUnit\")     0, 0}" << Sep << "\n";
+     << "  {DBGFIELD(\"InvalidUnit\")     0, 0, 0}" << Sep << "\n";
 
   for (unsigned i = 0, e = ProcModel.ProcResourceDefs.size(); i < e; ++i) {
     Record *PRDef = ProcModel.ProcResourceDefs[i];
@@ -643,8 +645,8 @@ void SubtargetEmitter::EmitProcessorResources(const CodeGenProcModel &ProcModel,
     OS << "  {DBGFIELD(\"" << PRDef->getName() << "\") ";
     if (PRDef->getName().size() < 15)
       OS.indent(15 - PRDef->getName().size());
-    OS << PRDef->getValueAsInt("NumUnits") << ", " << SuperIdx
-       << "}" << Sep << " // #" << i+1;
+    OS << PRDef->getValueAsInt("NumUnits") << ", " << SuperIdx << ", "
+       << PRDef->getValueAsBit("Buffered") << "}" << Sep << " // #" << i+1;
     if (SuperDef)
       OS << ", Super=" << SuperDef->getName();
     OS << "\n";
@@ -662,17 +664,18 @@ Record *SubtargetEmitter::FindWriteResources(
   if (SchedWrite.TheDef->isSubClassOf("SchedWriteRes"))
     return SchedWrite.TheDef;
 
-  // Check this processor's list of aliases for SchedWrite.
   Record *AliasDef = 0;
   for (RecIter AI = SchedWrite.Aliases.begin(), AE = SchedWrite.Aliases.end();
        AI != AE; ++AI) {
     const CodeGenSchedRW &AliasRW =
       SchedModels.getSchedRW((*AI)->getValueAsDef("AliasRW"));
-    Record *ModelDef = AliasRW.TheDef->getValueAsDef("SchedModel");
-    if (&SchedModels.getProcModel(ModelDef) != &ProcModel)
-      continue;
+    if (AliasRW.TheDef->getValueInit("SchedModel")->isComplete()) {
+      Record *ModelDef = AliasRW.TheDef->getValueAsDef("SchedModel");
+      if (&SchedModels.getProcModel(ModelDef) != &ProcModel)
+        continue;
+    }
     if (AliasDef)
-      throw TGError(AliasRW.TheDef->getLoc(), "Multiple aliases "
+      PrintFatalError(AliasRW.TheDef->getLoc(), "Multiple aliases "
                     "defined for processor " + ProcModel.ModelName +
                     " Ensure only one SchedAlias exists per RW.");
     AliasDef = AliasRW.TheDef;
@@ -689,7 +692,7 @@ Record *SubtargetEmitter::FindWriteResources(
     if (AliasDef == (*WRI)->getValueAsDef("WriteType")
         || SchedWrite.TheDef == (*WRI)->getValueAsDef("WriteType")) {
       if (ResDef) {
-        throw TGError((*WRI)->getLoc(), "Resources are defined for both "
+        PrintFatalError((*WRI)->getLoc(), "Resources are defined for both "
                       "SchedWrite and its alias on processor " +
                       ProcModel.ModelName);
       }
@@ -699,7 +702,7 @@ Record *SubtargetEmitter::FindWriteResources(
   // TODO: If ProcModel has a base model (previous generation processor),
   // then call FindWriteResources recursively with that model here.
   if (!ResDef) {
-    throw TGError(ProcModel.ModelDef->getLoc(),
+    PrintFatalError(ProcModel.ModelDef->getLoc(),
                   std::string("Processor does not define resources for ")
                   + SchedWrite.TheDef->getName());
   }
@@ -720,11 +723,13 @@ Record *SubtargetEmitter::FindReadAdvance(const CodeGenSchedRW &SchedRead,
        AI != AE; ++AI) {
     const CodeGenSchedRW &AliasRW =
       SchedModels.getSchedRW((*AI)->getValueAsDef("AliasRW"));
-    Record *ModelDef = AliasRW.TheDef->getValueAsDef("SchedModel");
-    if (&SchedModels.getProcModel(ModelDef) != &ProcModel)
-      continue;
+    if (AliasRW.TheDef->getValueInit("SchedModel")->isComplete()) {
+      Record *ModelDef = AliasRW.TheDef->getValueAsDef("SchedModel");
+      if (&SchedModels.getProcModel(ModelDef) != &ProcModel)
+        continue;
+    }
     if (AliasDef)
-      throw TGError(AliasRW.TheDef->getLoc(), "Multiple aliases "
+      PrintFatalError(AliasRW.TheDef->getLoc(), "Multiple aliases "
                     "defined for processor " + ProcModel.ModelName +
                     " Ensure only one SchedAlias exists per RW.");
     AliasDef = AliasRW.TheDef;
@@ -741,7 +746,7 @@ Record *SubtargetEmitter::FindReadAdvance(const CodeGenSchedRW &SchedRead,
     if (AliasDef == (*RAI)->getValueAsDef("ReadType")
         || SchedRead.TheDef == (*RAI)->getValueAsDef("ReadType")) {
       if (ResDef) {
-        throw TGError((*RAI)->getLoc(), "Resources are defined for both "
+        PrintFatalError((*RAI)->getLoc(), "Resources are defined for both "
                       "SchedRead and its alias on processor " +
                       ProcModel.ModelName);
       }
@@ -751,7 +756,7 @@ Record *SubtargetEmitter::FindReadAdvance(const CodeGenSchedRW &SchedRead,
   // TODO: If ProcModel has a base model (previous generation processor),
   // then call FindReadAdvance recursively with that model here.
   if (!ResDef && SchedRead.TheDef->getName() != "ReadDefault") {
-    throw TGError(ProcModel.ModelDef->getLoc(),
+    PrintFatalError(ProcModel.ModelDef->getLoc(),
                   std::string("Processor does not define resources for ")
                   + SchedRead.TheDef->getName());
   }
@@ -769,6 +774,8 @@ void SubtargetEmitter::GenSchedClassTables(const CodeGenProcModel &ProcModel,
   std::vector<MCSchedClassDesc> &SCTab = SchedTables.ProcSchedClasses.back();
   for (CodeGenSchedModels::SchedClassIter SCI = SchedModels.schedClassBegin(),
          SCE = SchedModels.schedClassEnd(); SCI != SCE; ++SCI) {
+    DEBUG(SCI->dump(&SchedModels));
+
     SCTab.resize(SCTab.size() + 1);
     MCSchedClassDesc &SCDesc = SCTab.back();
     // SCDesc.Name is guarded by NDEBUG
@@ -817,8 +824,8 @@ void SubtargetEmitter::GenSchedClassTables(const CodeGenProcModel &ProcModel,
       }
     }
     else if (!SCI->InstRWs.empty()) {
-      assert(SCI->Writes.empty() && SCI->Reads.empty() &&
-             "InstRW class should not have its own ReadWrites");
+      // This class may have a default ReadWrite list which can be overriden by
+      // InstRW definitions.
       Record *RWDef = 0;
       for (RecIter RWI = SCI->InstRWs.begin(), RWE = SCI->InstRWs.end();
            RWI != RWE; ++RWI) {
@@ -829,6 +836,8 @@ void SubtargetEmitter::GenSchedClassTables(const CodeGenProcModel &ProcModel,
         }
       }
       if (RWDef) {
+        Writes.clear();
+        Reads.clear();
         SchedModels.findRWs(RWDef->getValueAsListOfDefs("OperandReadWrites"),
                             Writes, Reads);
       }
@@ -840,7 +849,8 @@ void SubtargetEmitter::GenSchedClassTables(const CodeGenProcModel &ProcModel,
     std::vector<MCReadAdvanceEntry> ReadAdvanceEntries;
     for (IdxIter WI = Writes.begin(), WE = Writes.end(); WI != WE; ++WI) {
       IdxVec WriteSeq;
-      SchedModels.expandRWSequence(*WI, WriteSeq, /*IsRead=*/false);
+      SchedModels.expandRWSeqForProc(*WI, WriteSeq, /*IsRead=*/false,
+                                     ProcModel);
 
       // For each operand, create a latency entry.
       MCWriteLatencyEntry WLEntry;
@@ -1043,7 +1053,7 @@ void SubtargetEmitter::EmitSchedClassTables(SchedClassTables &SchedTables,
       continue;
 
     std::vector<MCSchedClassDesc> &SCTab =
-      SchedTables.ProcSchedClasses[1 + PI - SchedModels.procModelBegin()];
+      SchedTables.ProcSchedClasses[1 + (PI - SchedModels.procModelBegin())];
 
     OS << "\n// {Name, NumMicroOps, BeginGroup, EndGroup,"
        << " WriteProcResIdx,#, WriteLatencyIdx,#, ReadAdvanceIdx,#}\n";
@@ -1088,7 +1098,7 @@ void SubtargetEmitter::EmitProcessorModels(raw_ostream &OS) {
     if (PI->hasInstrSchedModel())
       EmitProcessorResources(*PI, OS);
     else if(!PI->ProcResourceDefs.empty())
-      throw TGError(PI->ModelDef->getLoc(), "SchedMachineModel defines "
+      PrintFatalError(PI->ModelDef->getLoc(), "SchedMachineModel defines "
                     "ProcResources without defining WriteRes SchedWriteRes");
 
     // Begin processor itinerary properties
