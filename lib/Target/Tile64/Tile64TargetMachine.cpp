@@ -70,7 +70,9 @@ bool Tile64PassConfig::addInstSelector() {
 }
 
 bool Tile64PassConfig::addPreEmitPass() {
-  addPass(createTile64VLIWPacketizer());
+	if(static_cast<Tile64TargetMachine*>(TM)->getSubtargetImpl()->isVLIWEnabled()) {
+	  addPass(createTile64VLIWPacketizer());
+	}
   return false;
 }
 

@@ -436,7 +436,8 @@ Tile64TargetLowering::Tile64TargetLowering(TargetMachine &TM)
   setPow2DivIsCheap(true);
 
   //TODO: scheduling modes: None, Source, RegPressure, Hybrid, ILP, VLIW
-  setSchedulingPreference(Sched::VLIW);
+	bool isVLIWEnabled = static_cast<Tile64TargetMachine*>(&TM)->getSubtargetImpl()->isVLIWEnabled();
+  setSchedulingPreference(isVLIWEnabled ? Sched::VLIW : Sched::Hybrid);
 
   //LoadExtActions
   setLoadExtAction(ISD::EXTLOAD, MVT::i1, Promote);
