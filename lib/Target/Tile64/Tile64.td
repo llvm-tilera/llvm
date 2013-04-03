@@ -37,6 +37,13 @@ include "Tile64InstrInfo.td"
 def Tile64InstrInfo : InstrInfo;
 
 //===----------------------------------------------------------------------===//
+// Subtarget features.
+//===----------------------------------------------------------------------===//
+
+def FeatureVLIW : SubtargetFeature<"vliw", "IsVLIWEnabled", "true",
+                                   "Enable VLIW scheduling">;
+
+//===----------------------------------------------------------------------===//
 // Tilera processors supported.
 //===----------------------------------------------------------------------===//
 
@@ -45,6 +52,7 @@ class Proc<string Name, SchedMachineModel Model,
   : ProcessorModel<Name, Model, Features>;
 
 def : Proc<"tile64", Tile64Model, []>;
+def : Proc<"tile64-vliw", Tile64Model, [FeatureVLIW]>;
 
 //===----------------------------------------------------------------------===//
 // Declare the target which we are implementing
